@@ -221,7 +221,7 @@ export function calculateContextDisplay(
 	const raw = calculateContextTokens(usageStats, agentId);
 
 	let tokens = raw;
-	let trustworthy = true;
+	const trustworthy = true;
 	if (raw > contextWindow) {
 		if (
 			fallbackPercentage != null &&

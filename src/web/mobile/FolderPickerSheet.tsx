@@ -291,7 +291,6 @@ export function FolderPickerSheet({
 		() => tree.map((node) => renderNode(node, 0)).filter(Boolean),
 		// renderNode is recreated each render but only reads stable callbacks
 		// (handleSelect, toggleFolder via useCallback) plus the listed state.
-		// eslint-disable-next-line react-hooks/exhaustive-deps
 		[tree, expanded, selected, colors]
 	);
 
