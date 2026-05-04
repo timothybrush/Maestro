@@ -12,7 +12,7 @@ Each agent has a project root. Cue looks for `.maestro/cue.yaml` (preferred) or 
                        ┌─────────────────────────────────────────────────┐
   YAML config  ───►    │ CueSessionRuntimeService                        │
   (.maestro/cue.yaml)  │  • initSession / refreshSession / removeSession │
-                       │  • ancestor cue.yaml fallback                   │
+                       │  • per-agent-cwd config (no ancestor walk)       │
                        │  • ownership conflict resolution                │
                        │  • registers trigger sources per subscription   │
                        └────────────┬────────────────────────────────────┘
@@ -82,9 +82,8 @@ A `github.pull_request` event for a chained subscription, traced from trigger to
 
 `initSession` (`cue-session-runtime-service.ts:107-200`) is the choke point:
 
-- **YAML discovery.** Calls `loadCueConfigDetailed(projectRoot)`. If the local file is empty AND `no_ancestor_fallback !== true`, walks up parent directories looking for the first non-empty `cue.yaml` and adopts it (with a `[CUE] using ancestor config from` log).
-- **Ownership.** When two sessions resolve to the same effective `cue.yaml` (shared `projectRoot`), `computeOwnershipWarning` (`cue-session-state.ts`) tags the non-owner. Subscriptions without an explicit `agent_id` are **suppressed** for the non-owner — both at trigger-source registration AND in `notifyAgentCompleted` (`cue-completion-service.ts:110, 143`). Without this gate, the same chain would dispatch twice. Tie-breaker is configurable via `settings.owner_agent_id` (UUID or display name) — falls back to first-by-session-list when unset.
-- **Ancestor pipelines.** Even when the local file has its own subs, ancestor subs whose `agent_id` targets THIS session are merged in (`cue-session-runtime-service.ts:217`). This is how a top-level repo cue.yaml can drive subprojects.
+- **YAML discovery.** Calls `loadCueConfigDetailed(projectRoot)` and uses ONLY the file at `<projectRoot>/.maestro/cue.yaml`. There is no parent-directory walk and no ancestor fallback — each session reads its own cue.yaml and nothing else. Cross-agent pipelines are stitched at runtime via `agent_id` references in `source_session_ids` / `fan_out_ids`, not via parent-directory inheritance. The matching writer side is `pipelinesToYamlByOwnerCwd` (`pipelineToYaml.ts`), which emits one yaml per participating agent's cwd.
+- **Ownership.** When two sessions resolve to the same effective `cue.yaml` (shared `projectRoot`), `computeOwnershipWarning` (`cue-session-state.ts`) tags the non-owner. Subscriptions without an explicit `agent_id` are **suppressed** for the non-owner — both at trigger-source registration AND in `notifyAgentCompleted` (`cue-completion-service.ts:110, 143`). Without this gate, the same chain would dispatch twice. Tie-breaker is configurable via `settings.owner_agent_id` (UUID or display name) — falls back to first-by-session-list when unset. The Cue dashboard hides ownership-flagged sessions by default (toggle in the header reveals them) so cross-agent shared-cwd noise doesn't crowd the table.
 - **Teardown.** `removeSession` stops trigger sources and unregisters from the registry. Queued events are kept unless `clearQueue(sessionId)` is called explicitly. `refreshSession` is teardown + re-init (used on YAML save and on agent rename).
 
 ## Subscription model

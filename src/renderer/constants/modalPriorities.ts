@@ -221,6 +221,9 @@ export const MODAL_PRIORITIES = {
 	/** System log viewer overlay */
 	LOG_VIEWER: 500,
 
+	/** Maestro Cue backup diff viewer (above Cue modal + help) */
+	CUE_BACKUP_DIFF: 470,
+
 	/** Maestro Cue help modal (above Cue modal) */
 	CUE_HELP: 465,
 

@@ -3236,6 +3236,27 @@ interface MaestroAPI {
 		onActivityUpdate: (callback: (data: CueLogPayload) => void) => () => void;
 	};
 
+	// Cue Backup API (snapshot + restore for cue.yaml + Cue prompts)
+	cueBackup: {
+		create: () => Promise<import('../shared/cue-backup-types').CueBackupSummary>;
+		list: () => Promise<import('../shared/cue-backup-types').CueBackupSummary[]>;
+		inspect: (filePath: string) => Promise<import('../shared/cue-backup-types').CueBackupManifest>;
+		readFile: (
+			filePath: string,
+			workspaceId: string,
+			relativePath: string
+		) => Promise<string | null>;
+		readLive: (cwd: string, relativePath: string) => Promise<string | null>;
+		restoreFile: (filePath: string, workspaceId: string, relativePath: string) => Promise<void>;
+		restoreAll: (
+			filePath: string
+		) => Promise<import('../shared/cue-backup-types').CueBackupRestoreResult>;
+		getDiffStatus: (
+			filePath: string
+		) => Promise<import('../shared/cue-backup-types').CueBackupDiffStatusMap>;
+		delete: (filePath: string) => Promise<void>;
+	};
+
 	// WakaTime API (CLI check, API key validation)
 	wakatime: {
 		checkCli: () => Promise<{ available: boolean; version?: string }>;

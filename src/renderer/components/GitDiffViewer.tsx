@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useRef, memo } from 'react';
 import { Diff, Hunk } from 'react-diff-view';
-import { Plus, Minus, ImageIcon } from 'lucide-react';
+import { Plus, Minus, ImageIcon, Columns2, AlignJustify } from 'lucide-react';
 import type { Theme } from '../types';
 import { parseGitDiff, getFileName, getDiffStats } from '../utils/gitDiffParser';
 import { useModalLayer } from '../hooks/ui/useModalLayer';
@@ -9,11 +9,26 @@ import { ImageDiffViewer } from './ImageDiffViewer';
 import { generateDiffViewStyles } from '../utils/markdownConfig';
 import 'react-diff-view/style/index.css';
 
+export type GitDiffViewType = 'unified' | 'split';
+
 interface GitDiffViewerProps {
 	diffText: string;
 	cwd: string;
 	theme: Theme;
 	onClose: () => void;
+	/**
+	 * Initial view type for hunks. The user can toggle between unified and
+	 * side-by-side via the header button regardless of the initial value.
+	 */
+	initialViewType?: GitDiffViewType;
+	/** Optional title shown in the header instead of the default "Git Diff". */
+	title?: string;
+	/**
+	 * Optional modal-layer priority override. Defaults to GIT_DIFF (200).
+	 * Use a higher priority when opening this viewer from inside another
+	 * modal so it captures Escape and focus correctly.
+	 */
+	priority?: number;
 }
 
 export const GitDiffViewer = memo(function GitDiffViewer({
@@ -21,8 +36,12 @@ export const GitDiffViewer = memo(function GitDiffViewer({
 	cwd,
 	theme,
 	onClose,
+	initialViewType = 'unified',
+	title = 'Git Diff',
+	priority,
 }: GitDiffViewerProps) {
 	const [activeTab, setActiveTab] = useState(0);
+	const [viewType, setViewType] = useState<GitDiffViewType>(initialViewType);
 	const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
 	// Store onClose in ref to avoid re-registering layer on every parent re-render
@@ -35,9 +54,14 @@ export const GitDiffViewer = memo(function GitDiffViewer({
 	// Register layer on mount
 	// Note: Using 'modal' type so App.tsx blocks all shortcuts and lets this component
 	// handle its own Cmd+Shift+[] for tab navigation
-	useModalLayer(MODAL_PRIORITIES.GIT_DIFF, 'Git Diff Preview', () => onCloseRef.current(), {
-		focusTrap: 'lenient',
-	});
+	useModalLayer(
+		priority ?? MODAL_PRIORITIES.GIT_DIFF,
+		'Git Diff Preview',
+		() => onCloseRef.current(),
+		{
+			focusTrap: 'lenient',
+		}
+	);
 
 	// Auto-scroll to active tab when it changes
 	useEffect(() => {
@@ -94,7 +118,7 @@ export const GitDiffViewer = memo(function GitDiffViewer({
 						style={{ borderColor: theme.colors.border, backgroundColor: theme.colors.bgSidebar }}
 					>
 						<span className="text-lg font-semibold" style={{ color: theme.colors.textMain }}>
-							Git Diff
+							{title}
 						</span>
 						<button
 							onClick={onClose}
@@ -143,7 +167,7 @@ export const GitDiffViewer = memo(function GitDiffViewer({
 				>
 					<div className="flex items-center gap-3">
 						<span className="text-lg font-semibold" style={{ color: theme.colors.textMain }}>
-							Git Diff
+							{title}
 						</span>
 						<span
 							className="text-xs px-2 py-1 rounded"
@@ -155,13 +179,37 @@ export const GitDiffViewer = memo(function GitDiffViewer({
 							{parsedFiles.length} {parsedFiles.length === 1 ? 'file' : 'files'} changed
 						</span>
 					</div>
-					<button
-						onClick={onClose}
-						className="px-3 py-1 rounded text-sm hover:bg-white/10 transition-colors"
-						style={{ color: theme.colors.textDim }}
-					>
-						Close (Esc)
-					</button>
+					<div className="flex items-center gap-2">
+						<button
+							onClick={() => setViewType((v) => (v === 'unified' ? 'split' : 'unified'))}
+							className="flex items-center gap-1.5 px-2.5 py-1 rounded text-xs hover:bg-white/10 transition-colors"
+							style={{
+								color: theme.colors.textDim,
+								border: `1px solid ${theme.colors.border}`,
+							}}
+							aria-label={viewType === 'unified' ? 'Switch to side-by-side' : 'Switch to unified'}
+							title={viewType === 'unified' ? 'Switch to side-by-side' : 'Switch to unified'}
+						>
+							{viewType === 'unified' ? (
+								<>
+									<Columns2 className="w-3.5 h-3.5" />
+									Side-by-side
+								</>
+							) : (
+								<>
+									<AlignJustify className="w-3.5 h-3.5" />
+									Unified
+								</>
+							)}
+						</button>
+						<button
+							onClick={onClose}
+							className="px-3 py-1 rounded text-sm hover:bg-white/10 transition-colors"
+							style={{ color: theme.colors.textDim }}
+						>
+							Close (Esc)
+						</button>
+					</div>
 				</div>
 
 				{/* Tabs */}
@@ -255,7 +303,7 @@ export const GitDiffViewer = memo(function GitDiffViewer({
 									</div>
 
 									{/* Render each hunk */}
-									<Diff viewType="unified" diffType={file.type} hunks={file.hunks}>
+									<Diff viewType={viewType} diffType={file.type} hunks={file.hunks}>
 										{(hunks) => hunks.map((hunk) => <Hunk key={hunk.content} hunk={hunk} />)}
 									</Diff>
 								</div>

@@ -70,6 +70,7 @@ import {
 	registerAgentErrorHandlers,
 	registerDirectorNotesHandlers,
 	registerCueHandlers,
+	registerCueBackupHandlers,
 	registerWakatimeHandlers,
 	registerFeedbackHandlers,
 	registerMaestroCliHandlers,
@@ -980,6 +981,11 @@ function setupIpcHandlers() {
 	// Cue - event-driven automation engine
 	registerCueHandlers({
 		getCueEngine: () => cueEngine,
+	});
+
+	// Cue Backup - snapshot / restore .maestro/cue.yaml + prompts (Cue modal Backup tab)
+	registerCueBackupHandlers({
+		sessionsStore,
 	});
 
 	// Agent management operations - extracted to src/main/ipc/handlers/agents.ts
