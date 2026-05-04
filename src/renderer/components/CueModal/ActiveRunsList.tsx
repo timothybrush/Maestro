@@ -24,7 +24,7 @@ interface ActiveRunsListProps {
 }
 
 const LIVE_OUTPUT_POLL_MS = 1500;
-const LIVE_OUTPUT_TAIL_CHARS = 8000;
+const LIVE_OUTPUT_TAIL_CHARS = 200_000;
 
 export function ActiveRunsList({
 	runs,
@@ -158,7 +158,7 @@ function LiveOutputPanel({ runId, theme }: LiveOutputPanelProps) {
 	const [error, setError] = useState<string | null>(null);
 	const [stale, setStale] = useState(false);
 	const [showRaw, setShowRaw] = useState(false);
-	const preRef = useRef<HTMLPreElement>(null);
+	const scrollerRef = useRef<HTMLElement | null>(null);
 	const userScrolledUpRef = useRef(false);
 
 	useEffect(() => {
@@ -189,27 +189,34 @@ function LiveOutputPanel({ runId, theme }: LiveOutputPanelProps) {
 		};
 	}, [runId]);
 
-	const tailStdout =
-		stdout.length > LIVE_OUTPUT_TAIL_CHARS ? stdout.slice(-LIVE_OUTPUT_TAIL_CHARS) : stdout;
+	// Tail by chars to bound work, then drop everything before the first
+	// newline so we don't try to parse a JSONL record that was cut in half.
+	// Without this the formatted view leaks raw JSON garbage at the top.
+	const tailStdout = useMemo(() => {
+		if (stdout.length <= LIVE_OUTPUT_TAIL_CHARS) return stdout;
+		const sliced = stdout.slice(-LIVE_OUTPUT_TAIL_CHARS);
+		const nl = sliced.indexOf('\n');
+		return nl === -1 ? sliced : sliced.slice(nl + 1);
+	}, [stdout]);
 	const tailStderr =
 		stderr.length > LIVE_OUTPUT_TAIL_CHARS ? stderr.slice(-LIVE_OUTPUT_TAIL_CHARS) : stderr;
 
 	// Parse stdout into structured peek lines so each event renders as a
-	// readable summary (assistant text, tool calls, thinking, results) rather
-	// than raw JSONL. Falls back to raw text for non-JSON / unknown formats.
+	// readable row (assistant text, tool calls, tool results, thinking,
+	// final result) rather than raw JSONL. Falls back to text for non-JSON
+	// / unknown formats.
 	const parsedLines = useMemo(() => parsePeekOutput(tailStdout), [tailStdout]);
 	const hasAny = parsedLines.length > 0 || tailStderr.length > 0;
 
 	// Auto-scroll to bottom on new content unless the user scrolled up.
 	useEffect(() => {
-		const el = preRef.current;
+		const el = scrollerRef.current;
 		if (!el || userScrolledUpRef.current) return;
 		el.scrollTop = el.scrollHeight;
 	}, [parsedLines, tailStderr, showRaw]);
 
-	const handleScroll = () => {
-		const el = preRef.current;
-		if (!el) return;
+	const handleScroll = (e: React.UIEvent<HTMLElement>) => {
+		const el = e.currentTarget;
 		const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
 		userScrolledUpRef.current = distanceFromBottom > 20;
 	};
@@ -236,46 +243,71 @@ function LiveOutputPanel({ runId, theme }: LiveOutputPanelProps) {
 					Failed to fetch live output: {error}
 				</div>
 			)}
-			<pre
-				ref={preRef}
-				onScroll={handleScroll}
-				className="font-mono whitespace-pre-wrap break-words rounded px-2 py-1.5"
-				style={{
-					maxHeight: 280,
-					overflowY: 'auto',
-					backgroundColor: theme.colors.bgMain,
-					color: theme.colors.textMain,
-					border: `1px solid ${theme.colors.border}`,
-					margin: 0,
-				}}
-			>
-				{!hasAny && !error && (
-					<span style={{ color: theme.colors.textDim }}>Waiting for output…</span>
-				)}
-				{showRaw ? (
-					<>
-						{tailStdout}
-						{tailStderr && (
-							<>
-								{tailStdout && '\n'}
-								<span style={{ color: theme.colors.error }}>{tailStderr}</span>
-							</>
-						)}
-					</>
-				) : (
-					<>
-						{parsedLines.map((line, idx) => (
-							<FormattedLine key={idx} line={line} theme={theme} />
-						))}
-						{tailStderr && (
-							<>
-								{parsedLines.length > 0 && '\n'}
-								<span style={{ color: theme.colors.error }}>{tailStderr}</span>
-							</>
-						)}
-					</>
-				)}
-			</pre>
+			{showRaw ? (
+				<pre
+					ref={(el) => {
+						scrollerRef.current = el;
+					}}
+					onScroll={handleScroll}
+					className="font-mono whitespace-pre-wrap break-words rounded px-2 py-1.5"
+					style={{
+						maxHeight: 320,
+						overflowY: 'auto',
+						backgroundColor: theme.colors.bgMain,
+						color: theme.colors.textMain,
+						border: `1px solid ${theme.colors.border}`,
+						margin: 0,
+						fontSize: 11,
+					}}
+				>
+					{!hasAny && !error && (
+						<span style={{ color: theme.colors.textDim }}>Waiting for output…</span>
+					)}
+					{tailStdout}
+					{tailStderr && (
+						<>
+							{tailStdout && '\n'}
+							<span style={{ color: theme.colors.error }}>{tailStderr}</span>
+						</>
+					)}
+				</pre>
+			) : (
+				<div
+					ref={(el) => {
+						scrollerRef.current = el;
+					}}
+					onScroll={handleScroll}
+					className="rounded"
+					style={{
+						maxHeight: 320,
+						overflowY: 'auto',
+						backgroundColor: theme.colors.bgMain,
+						color: theme.colors.textMain,
+						border: `1px solid ${theme.colors.border}`,
+					}}
+				>
+					{!hasAny && !error && (
+						<div className="px-2 py-1.5" style={{ color: theme.colors.textDim }}>
+							Waiting for output…
+						</div>
+					)}
+					{parsedLines.map((line, idx) => (
+						<FormattedLine key={idx} line={line} theme={theme} zebra={idx % 2 === 1} />
+					))}
+					{tailStderr && (
+						<div
+							className="font-mono whitespace-pre-wrap break-words px-2 py-1.5"
+							style={{
+								color: theme.colors.error,
+								borderTop: `1px solid ${theme.colors.border}`,
+								fontSize: 11,
+							}}
+						>
+							{tailStderr}
+						</div>
+					)}
+				</div>
+			)}
 		</div>
 	);
 }
@@ -283,33 +315,59 @@ function LiveOutputPanel({ runId, theme }: LiveOutputPanelProps) {
 interface FormattedLineProps {
 	line: PeekLine;
 	theme: Theme;
+	zebra: boolean;
 }
 
 /**
- * Render a single parsed peek line with type-specific styling. Each line is a
- * complete logical event from the agent's stream (one assistant turn, one tool
- * call, one tool result, etc.) rendered with a readable label and the right
- * color so the user can scan a long-running Cue's progress at a glance.
+ * Render a parsed peek line as a two-column table row: a fixed-width label
+ * cell on the left (icon + type) and a flex-grow content cell on the right.
+ * Zebra striping helps the eye track rows in a long log.
  */
-function FormattedLine({ line, theme }: FormattedLineProps) {
-	const styles: Record<PeekLine['type'], { color: string; prefix: string; italic?: boolean }> = {
-		system: { color: theme.colors.textDim, prefix: '⚙ ' },
-		thinking: { color: theme.colors.textDim, prefix: '💭 ', italic: true },
-		tool: { color: theme.colors.accent, prefix: '🔧 ' },
-		text: { color: theme.colors.textMain, prefix: '' },
-		result: { color: theme.colors.success, prefix: '✓ ' },
+function FormattedLine({ line, theme, zebra }: FormattedLineProps) {
+	const styles: Record<
+		PeekLine['type'],
+		{ color: string; icon: string; label: string; italic?: boolean }
+	> = {
+		system: { color: theme.colors.textDim, icon: '⚙', label: 'system' },
+		thinking: { color: theme.colors.textDim, icon: '💭', label: 'think', italic: true },
+		tool: { color: theme.colors.accent, icon: '🔧', label: 'tool' },
+		tool_result: { color: theme.colors.textDim, icon: '↳', label: 'result' },
+		text: { color: theme.colors.textMain, icon: '💬', label: 'say' },
+		result: { color: theme.colors.success, icon: '✓', label: 'done' },
 	};
 	const style = styles[line.type];
 	return (
 		<div
+			className="flex gap-2 px-2 py-1 font-mono"
 			style={{
-				color: style.color,
-				fontStyle: style.italic ? 'italic' : undefined,
-				marginBottom: 2,
+				fontSize: 11,
+				backgroundColor: zebra ? 'rgba(127,127,127,0.06)' : undefined,
+				borderBottom: `1px solid ${theme.colors.border}40`,
 			}}
 		>
-			{style.prefix}
-			{line.content}
+			<div
+				className="flex-shrink-0 flex items-center gap-1 select-none"
+				style={{
+					color: style.color,
+					width: 64,
+					opacity: 0.85,
+				}}
+				title={line.type}
+			>
+				<span>{style.icon}</span>
+				<span style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+					{style.label}
+				</span>
+			</div>
+			<div
+				className="flex-1 min-w-0 whitespace-pre-wrap break-words"
+				style={{
+					color: style.color,
+					fontStyle: style.italic ? 'italic' : undefined,
+				}}
+			>
+				{line.content}
+			</div>
 		</div>
 	);
 }
