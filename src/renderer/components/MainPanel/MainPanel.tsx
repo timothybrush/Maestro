@@ -372,6 +372,24 @@ export const MainPanel = React.memo(
 						}
 					}
 				},
+				focusActiveTab: () => {
+					if (!activeSession) return;
+					// Mirrors TabBar's targetTabId resolution so AI/terminal/file/browser
+					// tabs all map to the right header element.
+					const targetTabId =
+						activeSession.inputMode === 'terminal'
+							? activeSession.activeTerminalTabId || activeSession.activeTabId
+							: activeSession.activeFileTabId ||
+								activeSession.activeBrowserTabId ||
+								activeSession.activeTabId;
+					if (!targetTabId) return;
+					const tabElement = document.querySelector(
+						`[data-tab-id="${targetTabId}"]`
+					) as HTMLElement | null;
+					if (!tabElement) return;
+					tabElement.scrollIntoView({ block: 'nearest', inline: 'center' });
+					tabElement.focus();
+				},
 				reloadBrowserTab: () => {
 					if (activeSession?.activeBrowserTabId) {
 						const host = document.querySelector('[data-testid="browser-tab-host"]');
