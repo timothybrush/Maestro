@@ -90,6 +90,31 @@ describe('useAgentSshRemoteListener', () => {
 		expect(gitService.isRepo).toHaveBeenCalledWith(expect.any(String), 'r-1');
 	});
 
+	it('does NOT re-probe on a duplicate event for the SAME remote (e.g. reconnect/replay)', async () => {
+		vi.mocked(gitService.isRepo).mockResolvedValue(false);
+
+		const session = createMockSession({
+			id: 'sess-1',
+			isGitRepo: false,
+			sshRemote: { id: 'r-1', name: 'r', host: 'h' } as any,
+			sshRemoteId: 'r-1',
+		});
+		useSessionStore.setState({ sessions: [session] } as any);
+
+		renderHook(() => useAgentSshRemoteListener());
+		// Same remote ID arrives again — could be a reconnect or a duplicate
+		// IPC event. The store already has remote 'r-1' attached and the
+		// previous probe already returned non-git, so re-probing would burn
+		// 3 IPC calls for nothing.
+		handler!('sess-1', { id: 'r-1', name: 'r', host: 'h' });
+		await new Promise((r) => setTimeout(r, 0));
+		await new Promise((r) => setTimeout(r, 0));
+
+		expect(gitService.isRepo).not.toHaveBeenCalled();
+		expect(gitService.getBranches).not.toHaveBeenCalled();
+		expect(gitService.getTags).not.toHaveBeenCalled();
+	});
+
 	it('skips no-op render when session is missing', () => {
 		const setSessionsSpy = vi.spyOn(useSessionStore.getState(), 'setSessions');
 		renderHook(() => useAgentSshRemoteListener());

@@ -33,6 +33,14 @@ export function useAgentSshRemoteListener(): void {
 
 				if (!getSessions().some((s) => s.id === actualSessionId)) return;
 
+				// Snapshot the previously-attached remote ID BEFORE setSessions
+				// runs. After setSessions, the session's `sshRemote.id` already
+				// equals the new value (Zustand updates synchronously), so we'd
+				// have no way to distinguish a fresh attach from a duplicate
+				// event for the same remote — and would re-probe both cases.
+				const previousSshRemoteId = getSessions().find((s) => s.id === actualSessionId)
+					?.sshRemote?.id;
+
 				setSessions((prev) =>
 					prev.map((s) => {
 						if (s.id !== actualSessionId) return s;
@@ -47,7 +55,12 @@ export function useAgentSshRemoteListener(): void {
 					})
 				);
 
-				if (sshRemote?.id) {
+				// Only probe on a genuine remote change. Without this gate, a
+				// reconnect or duplicate IPC event for the same remote would
+				// fire 3 IPC calls (isRepo + getBranches + getTags) for nothing
+				// — and could even spawn concurrent probes if the first hasn't
+				// flipped `isGitRepo` to true yet.
+				if (sshRemote?.id && previousSshRemoteId !== sshRemote.id) {
 					const session = getSessions().find((s) => s.id === actualSessionId);
 					if (session && !session.isGitRepo) {
 						const remoteCwd = session.sessionSshRemoteConfig?.workingDirOverride || session.cwd;
