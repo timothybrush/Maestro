@@ -1432,16 +1432,21 @@ export const useSettingsStore = create<SettingsStore>()((set, get) => {
 				),
 				maxQueueDepth: Math.max(prev.maxQueueDepth, currentValues.maxQueueDepth ?? 0),
 			};
-			// Only persist if any value actually changed
+			// PERF: Skip both the persist AND the in-memory set when nothing changed.
+			// updateUsageStats fires from useAutoRunAchievements on every `sessions` ref flip
+			// (i.e., every ~200ms streaming flush). Calling `set` with a fresh object identity
+			// each time triggers every consumer of useSettingsStore() to re-render, which
+			// cascades through MaestroConsoleInner → GitStatusProvider → entire workspace tree.
 			if (
-				updated.maxAgents !== prev.maxAgents ||
-				updated.maxDefinedAgents !== prev.maxDefinedAgents ||
-				updated.maxSimultaneousAutoRuns !== prev.maxSimultaneousAutoRuns ||
-				updated.maxSimultaneousQueries !== prev.maxSimultaneousQueries ||
-				updated.maxQueueDepth !== prev.maxQueueDepth
+				updated.maxAgents === prev.maxAgents &&
+				updated.maxDefinedAgents === prev.maxDefinedAgents &&
+				updated.maxSimultaneousAutoRuns === prev.maxSimultaneousAutoRuns &&
+				updated.maxSimultaneousQueries === prev.maxSimultaneousQueries &&
+				updated.maxQueueDepth === prev.maxQueueDepth
 			) {
-				window.maestro.settings.set('usageStats', updated);
+				return;
 			}
+			window.maestro.settings.set('usageStats', updated);
 			set({ usageStats: updated });
 		},
 

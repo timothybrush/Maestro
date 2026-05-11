@@ -164,9 +164,11 @@ export const SessionItem = memo(function SessionItem({
 	const worktreesExpanded = session.worktreesExpanded ?? true;
 	const showCollapsedCountBadge =
 		isWorktreeParent && !worktreesExpanded && (worktreeChildCount ?? 0) > 0;
-	// Determine if we show the GIT/LOCAL badge (not shown in bookmark variant, terminal sessions, or worktree variant)
-	const showGitLocalBadge =
-		variant !== 'bookmark' && variant !== 'worktree' && session.toolType !== 'terminal';
+	// Location pills: SSH indicator always shown (even in bookmarks) since it
+	// signals where prompts will run. GIT/LOCAL are suppressed in the bookmark
+	// variant to keep the row compact.
+	const showLocationPills = variant !== 'worktree' && session.toolType !== 'terminal';
+	const showGitLocalBadge = showLocationPills && variant !== 'bookmark';
 
 	// Status indicator: enhanced color/animation/label, plus hollow signal for
 	// Claude Code agents that haven't bound to a provider session yet.
@@ -353,7 +355,7 @@ export const SessionItem = memo(function SessionItem({
 				)}
 
 				{/* Location Indicator Pills */}
-				{showGitLocalBadge &&
+				{showLocationPills &&
 					(session.isGitRepo ? (
 						/* Git repo: Show server icon pill (if remote) + GIT pill */
 						<>
@@ -369,37 +371,45 @@ export const SessionItem = memo(function SessionItem({
 									<Server className="w-3 h-3" />
 								</div>
 							)}
-							<div
-								className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase"
-								style={{
-									backgroundColor: theme.colors.accent + '30',
-									color: theme.colors.accent,
-								}}
-								title="Git repository"
-							>
-								GIT
-							</div>
+							{showGitLocalBadge && (
+								<div
+									className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase"
+									style={{
+										backgroundColor: theme.colors.accent + '30',
+										color: theme.colors.accent,
+									}}
+									title="Git repository"
+								>
+									GIT
+								</div>
+							)}
 						</>
-					) : (
-						/* Plain directory: Show REMOTE or LOCAL (not both) */
+					) : session.sessionSshRemoteConfig?.enabled ? (
+						/* Plain directory on remote: always show REMOTE */
 						<div
 							className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase"
 							style={{
-								backgroundColor: session.sessionSshRemoteConfig?.enabled
-									? theme.colors.warning + '30'
-									: theme.colors.textDim + '20',
-								color: session.sessionSshRemoteConfig?.enabled
-									? theme.colors.warning
-									: theme.colors.textDim,
+								backgroundColor: theme.colors.warning + '30',
+								color: theme.colors.warning,
 							}}
-							title={
-								session.sessionSshRemoteConfig?.enabled
-									? 'Running on remote host via SSH'
-									: 'Local directory (not a git repo)'
-							}
+							title="Running on remote host via SSH"
 						>
-							{session.sessionSshRemoteConfig?.enabled ? 'REMOTE' : 'LOCAL'}
+							REMOTE
 						</div>
+					) : (
+						/* Plain local directory: LOCAL pill suppressed in bookmark variant */
+						showGitLocalBadge && (
+							<div
+								className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase"
+								style={{
+									backgroundColor: theme.colors.textDim + '20',
+									color: theme.colors.textDim,
+								}}
+								title="Local directory (not a git repo)"
+							>
+								LOCAL
+							</div>
+						)
 					))}
 
 				{/* AUTO Mode Indicator */}
