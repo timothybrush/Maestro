@@ -131,7 +131,11 @@ export function useFilePreviewSearch({
 			isImage ||
 			isCsv ||
 			isJsonl ||
-			(isJson && isJqMode)
+			(isJson && isJqMode) ||
+			// Fast tier provides its own adapter — defer counting + scroll to
+			// the markdown/readable-text CSS-Highlight effect below, which has
+			// been widened to handle code Fast tier when an adapter is present.
+			searchAdapter
 		) {
 			setTotalMatches(0);
 			setCurrentMatchIndex(-1);
@@ -230,15 +234,15 @@ export function useFilePreviewSearch({
 		accentColor,
 	]);
 
-	// Search matches in markdown preview mode - use CSS Custom Highlight API
+	// Search matches in markdown preview mode - use CSS Custom Highlight API.
+	// Also runs for Fast tier non-markdown content when a search adapter is
+	// provided (the adapter supplies the authoritative match count; the
+	// effect still applies CSS Highlights to currently-mounted DOM text).
 	useEffect(() => {
-		if (
-			(!isMarkdown && !isReadableText) ||
-			markdownEditMode ||
-			!searchQuery.trim() ||
-			!markdownContainerRef.current
-		) {
-			if ((isMarkdown || isReadableText) && !markdownEditMode) {
+		const adapterActive = Boolean(searchAdapter);
+		const isTextLike = isMarkdown || isReadableText || adapterActive;
+		if (!isTextLike || markdownEditMode || !searchQuery.trim() || !markdownContainerRef.current) {
+			if (isTextLike && !markdownEditMode) {
 				setTotalMatches(0);
 				setCurrentMatchIndex(-1);
 				matchElementsRef.current = [];

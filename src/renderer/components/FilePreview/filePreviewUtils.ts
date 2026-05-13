@@ -127,6 +127,20 @@ export const getLanguageFromFilename = (filename: string): string => {
 	return LANGUAGE_MAP[ext || ''] || 'text';
 };
 
+/**
+ * Whether a language identifier represents code (vs plain prose).
+ *
+ * Used by FilePreview chip-visibility rules and tier-routing decisions to
+ * tell apart `.ts` / `.py` / `.css` files (Shiki-eligible code) from `.txt`
+ * / `.log` / `README` (plain prose).
+ *
+ * `'markdown'` is intentionally NOT considered code — markdown has its own
+ * Fast-tier renderer.
+ */
+export const isCodeFile = (language: string): boolean => {
+	return language !== 'text' && language !== 'markdown';
+};
+
 // ─── Readable Text Detection ──────────────────────────────────────────────────
 
 /** Plain prose extensions that should be rendered as readable text (supporting Bionify). */

@@ -8,6 +8,7 @@ import {
 	countMarkdownTasks,
 	extractHeadings,
 	resolveImagePath,
+	isCodeFile,
 	LARGE_FILE_TOKEN_SKIP_THRESHOLD,
 	LARGE_FILE_PREVIEW_LIMIT,
 	pickPreviewTier,
@@ -372,6 +373,26 @@ describe('filePreviewUtils', () => {
 		it('fast threshold is below giant threshold', () => {
 			expect(FAST_TIER_BYTES).toBeLessThan(GIANT_TIER_BYTES);
 			expect(FAST_TIER_LINES).toBeLessThan(GIANT_TIER_LINES);
+		});
+	});
+
+	describe('isCodeFile', () => {
+		it('returns true for source-code languages', () => {
+			for (const lang of ['typescript', 'tsx', 'python', 'rust', 'go', 'json', 'yaml']) {
+				expect(isCodeFile(lang)).toBe(true);
+			}
+		});
+
+		it('returns false for plain text', () => {
+			expect(isCodeFile('text')).toBe(false);
+		});
+
+		it('returns false for markdown (handled by its own Fast tier)', () => {
+			expect(isCodeFile('markdown')).toBe(false);
+		});
+
+		it('returns true for any other non-empty language identifier', () => {
+			expect(isCodeFile('whatever')).toBe(true);
 		});
 	});
 });

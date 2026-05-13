@@ -54,6 +54,7 @@ import {
 	countMarkdownTasks,
 	extractHeadings,
 	isReadableTextPreview,
+	isCodeFile,
 	LARGE_FILE_TOKEN_SKIP_THRESHOLD,
 	LARGE_FILE_PREVIEW_LIMIT,
 	pickPreviewTier,
@@ -74,6 +75,11 @@ import { logger } from '../../utils/logger';
 // means small-file previews don't pay the ~135 KB cost of markdown-it +
 // react-virtuoso + DOMPurify until a large file actually triggers it.
 const MarkdownPreviewFast = lazy(() => import('./markdownFast'));
+
+// Lazy-loaded Fast tier preview for plain text and code files. Same lazy
+// strategy as the markdown Fast tier — small text files don't pay for
+// TanStack Virtual + Shiki until a large file triggers the Fast tier.
+const TextPreviewFast = lazy(() => import('./textFast'));
 
 export const FilePreview = React.memo(
 	forwardRef<FilePreviewHandle, FilePreviewProps>(function FilePreview(
@@ -155,6 +161,9 @@ export const FilePreview = React.memo(
 		// Imperative handle for the lazy-loaded Fast tier preview. Used by the
 		// TOC to scroll to a heading via virtuoso.scrollToIndex when in Fast tier.
 		const markdownFastRef = useRef<import('./markdownFast').MarkdownPreviewFastHandle>(null);
+		// Imperative handle for the lazy-loaded text/code Fast tier preview.
+		// Cmd+F search delegates to this handle when in Fast tier non-markdown.
+		const textFastRef = useRef<import('./textFast').TextPreviewFastHandle>(null);
 
 		// Reset full content view when file changes
 		useEffect(() => {
@@ -241,16 +250,16 @@ export const FilePreview = React.memo(
 			return file.content.length > LARGE_FILE_TOKEN_SKIP_THRESHOLD;
 		}, [file?.content]);
 
-		// Choose preview tier for markdown files. react-markdown handles small
-		// files; large files route to MarkdownPreviewFast (markdown-it + virtuoso).
-		// Tier is memoized on path so switching tabs and coming back doesn't
-		// re-decide.
+		// Choose preview tier based on file size. Applies to all text-like
+		// content (markdown, plain text, source code) — binary and image files
+		// always stay in Rich. Tier is memoized on path so switching tabs and
+		// coming back doesn't re-decide.
 		const autoTier = useMemo(() => {
-			if (!file?.content || !isMarkdown) return 'rich' as const;
+			if (!file?.content || isImage || isBinary) return 'rich' as const;
 			const bytes = file.content.length;
 			const lines = countLines(file.content);
 			return pickPreviewTier(bytes, lines);
-		}, [file?.path, file?.content, isMarkdown]);
+		}, [file?.path, file?.content, isImage, isBinary]);
 
 		// Effective tier respects the user's per-tab override, falling back to
 		// the auto-picked tier. The PreviewTierChip in the header lets the user
@@ -304,16 +313,23 @@ export const FilePreview = React.memo(
 			displayedContentLength: displayContent.length,
 			initialSearchQuery,
 			onSearchQueryChange,
-			// Fast tier: route search through the markdown-fast handle so the
-			// match count covers virtualized blocks (not just the ~30 mounted)
-			// and navigation scrolls Virtuoso to the right block.
+			// Fast tier: route search through the appropriate handle. Markdown
+			// uses the markdownFast handle; plain text and code use the
+			// textFast handle. In either case, match count covers the whole
+			// document (not just the currently-mounted pages) and navigation
+			// scrolls the virtualizer to the right block/page.
 			searchAdapter:
-				previewTier === 'fast'
+				previewTier === 'fast' && isMarkdown
 					? {
 							findHits: (q) => markdownFastRef.current?.findInContent(q) ?? [],
 							scrollToMatch: (m) => markdownFastRef.current?.scrollToMatch(m),
 						}
-					: undefined,
+					: previewTier === 'fast' && !markdownEditMode && !isImage && !isBinary
+						? {
+								findHits: (q) => textFastRef.current?.findInContent(q) ?? [],
+								scrollToMatch: (m) => textFastRef.current?.scrollToMatch(m),
+							}
+						: undefined,
 		});
 
 		// Bionify reading mode follows the global setting; disabled while search highlights are active.
@@ -1055,23 +1071,29 @@ export const FilePreview = React.memo(
 					headerIconClass={headerIconClass}
 				/>
 
-				{/* Tier override chip — only meaningful for markdown previews */}
-				{isMarkdown && !markdownEditMode && file && (
-					<div
-						className="flex items-center justify-end gap-2 px-6 py-1.5 border-b shrink-0"
-						style={{
-							backgroundColor: theme.colors.bgSidebar,
-							borderColor: theme.colors.border,
-						}}
-					>
-						<PreviewTierChip
-							theme={theme}
-							autoTier={autoTier}
-							override={previewTierOverride}
-							onSelect={(tier) => onPreviewTierChange?.(tier)}
-						/>
-					</div>
-				)}
+				{/* Tier override chip — visible for any text-like preview (markdown,
+				    readable text, or code). Hidden during edit, on images, and
+				    on binary files. */}
+				{!markdownEditMode &&
+					!isImage &&
+					!isBinary &&
+					(isMarkdown || isReadableText || isCodeFile(language)) &&
+					file && (
+						<div
+							className="flex items-center justify-end gap-2 px-6 py-1.5 border-b shrink-0"
+							style={{
+								backgroundColor: theme.colors.bgSidebar,
+								borderColor: theme.colors.border,
+							}}
+						>
+							<PreviewTierChip
+								theme={theme}
+								autoTier={autoTier}
+								override={previewTierOverride}
+								onSelect={(tier) => onPreviewTierChange?.(tier)}
+							/>
+						</div>
+					)}
 
 				{/* File changed on disk banner */}
 				{fileChangedOnDisk && (
@@ -1546,6 +1568,29 @@ export const FilePreview = React.memo(
 								{file.content}
 							</ReactMarkdown>
 						</div>
+					) : isReadableText && previewTier === 'fast' && !markdownEditMode ? (
+						<Suspense
+							fallback={
+								<div
+									style={{
+										padding: '24px',
+										color: theme.colors.textDim,
+										fontSize: '13px',
+									}}
+								>
+									Loading fast preview…
+								</div>
+							}
+						>
+							<TextPreviewFast
+								ref={textFastRef}
+								content={file.content}
+								language="text"
+								theme={theme}
+								containerRef={markdownContainerRef}
+								filePath={file.path}
+							/>
+						</Suspense>
 					) : isReadableText && !markdownEditMode ? (
 						<div>
 							{/* Large file truncation banner (readable text) */}
@@ -1589,6 +1634,29 @@ export const FilePreview = React.memo(
 								{displayContent}
 							</BionifyTextBlock>
 						</div>
+					) : previewTier === 'fast' && !markdownEditMode && !isImage && !isBinary ? (
+						<Suspense
+							fallback={
+								<div
+									style={{
+										padding: '24px',
+										color: theme.colors.textDim,
+										fontSize: '13px',
+									}}
+								>
+									Loading fast preview…
+								</div>
+							}
+						>
+							<TextPreviewFast
+								ref={textFastRef}
+								content={file.content}
+								language={language}
+								theme={theme}
+								containerRef={markdownContainerRef}
+								filePath={file.path}
+							/>
+						</Suspense>
 					) : (
 						<div ref={codeContainerRef}>
 							{/* Large file truncation banner */}
