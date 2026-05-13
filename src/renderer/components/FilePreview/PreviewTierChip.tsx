@@ -117,14 +117,30 @@ export const PreviewTierChip: React.FC<PreviewTierChipProps> = ({
 					style={{
 						backgroundColor: theme.colors.bgSidebar,
 						border: `1px solid ${theme.colors.border}`,
-						minWidth: '220px',
+						minWidth: '240px',
 					}}
 				>
+					{/* Status header — always reflects the tier that is actually
+					    rendering right now (override if set, otherwise auto). */}
+					<div
+						data-testid="preview-tier-chip-status"
+						className="px-3 py-2 text-[10px] uppercase tracking-wider border-b"
+						style={{
+							color: theme.colors.textDim,
+							backgroundColor: theme.colors.bgMain,
+							borderColor: theme.colors.border,
+						}}
+					>
+						Currently rendering:{' '}
+						<span style={{ color: theme.colors.accent, fontWeight: 600 }}>
+							{TIER_META[effective].label}
+						</span>
+					</div>
 					<MenuRow
 						theme={theme}
 						active={!override}
 						label="Auto"
-						description={`Currently: ${TIER_META[autoTier].label}`}
+						description={`Auto picks ${TIER_META[autoTier].label} for this file`}
 						onClick={() => select(undefined)}
 					/>
 					{(['rich', 'fast', 'giant'] as const).map((tier) => {

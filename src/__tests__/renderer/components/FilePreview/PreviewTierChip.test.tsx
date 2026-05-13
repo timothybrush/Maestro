@@ -97,6 +97,48 @@ describe('PreviewTierChip', () => {
 			expect(menu.textContent).toContain('Giant');
 		});
 
+		describe('status header', () => {
+			it('shows "Currently rendering: <autoTier>" when no override is set', () => {
+				renderChip({ autoTier: 'fast' });
+				fireEvent.click(screen.getByTestId('preview-tier-chip-button'));
+				const status = screen.getByTestId('preview-tier-chip-status');
+				expect(status.textContent).toContain('Currently rendering');
+				expect(status.textContent).toContain('Fast');
+			});
+
+			it('shows the OVERRIDE tier (not autoTier) when an override is set', () => {
+				renderChip({ autoTier: 'fast', override: 'rich' });
+				fireEvent.click(screen.getByTestId('preview-tier-chip-button'));
+				const status = screen.getByTestId('preview-tier-chip-status');
+				expect(status.textContent).toContain('Rich');
+				expect(status.textContent).not.toContain('Fast');
+			});
+
+			it('shows "Giant" when override is giant', () => {
+				renderChip({ autoTier: 'fast', override: 'giant' });
+				fireEvent.click(screen.getByTestId('preview-tier-chip-button'));
+				expect(screen.getByTestId('preview-tier-chip-status').textContent).toContain('Giant');
+			});
+		});
+
+		describe('Auto row description', () => {
+			it('describes what Auto picks, not the current render', () => {
+				renderChip({ autoTier: 'fast' });
+				fireEvent.click(screen.getByTestId('preview-tier-chip-button'));
+				const autoRow = screen.getAllByRole('menuitem')[0];
+				expect(autoRow.textContent).toContain('Auto picks Fast');
+			});
+
+			it('still describes Auto correctly when an override is active', () => {
+				// Override is Rich; Auto would still pick Fast — the row text
+				// must reflect Auto behavior, not the override.
+				renderChip({ autoTier: 'fast', override: 'rich' });
+				fireEvent.click(screen.getByTestId('preview-tier-chip-button'));
+				const autoRow = screen.getAllByRole('menuitem')[0];
+				expect(autoRow.textContent).toContain('Auto picks Fast');
+			});
+		});
+
 		it('closes the menu after a selection', () => {
 			const { onSelect } = renderChip({});
 			fireEvent.click(screen.getByTestId('preview-tier-chip-button'));
