@@ -1,14 +1,10 @@
 import React from 'react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { PreviewTierChip } from '../../../../renderer/components/FilePreview/PreviewTierChip';
 import { mockTheme } from '../../../helpers/mockTheme';
 
 describe('PreviewTierChip', () => {
-	beforeEach(() => {
-		// Each test starts with a fresh DOM
-	});
-
 	function renderChip(
 		opts: {
 			autoTier?: 'rich' | 'fast' | 'giant';
@@ -66,14 +62,16 @@ describe('PreviewTierChip', () => {
 			expect(btn.getAttribute('aria-expanded')).toBe('false');
 		});
 
-		it('shows tooltip text describing the current mode', () => {
+		it('tooltip says "Auto" when no override is set', () => {
 			renderChip({ autoTier: 'fast' });
 			expect(screen.getByTestId('preview-tier-chip-button').getAttribute('title')).toContain(
 				'Auto'
 			);
+		});
 
+		it('tooltip says "Forced" when an override is set', () => {
 			renderChip({ autoTier: 'fast', override: 'rich' });
-			expect(screen.getAllByTestId('preview-tier-chip-button')[1].getAttribute('title')).toContain(
+			expect(screen.getByTestId('preview-tier-chip-button').getAttribute('title')).toContain(
 				'Forced'
 			);
 		});

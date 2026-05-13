@@ -2,8 +2,9 @@ import type { ClickModifiers, LinkAction, LinkDescriptor } from './types';
 
 const MAESTRO_FILE_PROTOCOL = 'maestro-file://';
 
-/** External protocols we hand off to the parent's external-link handler. */
-const EXTERNAL_PROTOCOL_RE = /^(?:https?|mailto|tel|file):/;
+/** External protocols we hand off to the parent's external-link handler.
+ * Case-insensitive so `HTTPS://` and other uppercase variants still match. */
+const EXTERNAL_PROTOCOL_RE = /^(?:https?|mailto|tel|file):/i;
 
 /**
  * Decide what should happen when a markdown link is clicked.

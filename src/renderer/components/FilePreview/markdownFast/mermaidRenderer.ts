@@ -17,6 +17,7 @@
  */
 
 import type { Theme } from '../../../constants/themes';
+import { captureException } from '../../../utils/sentry';
 
 type MermaidModule = typeof import('mermaid');
 
@@ -80,16 +81,32 @@ export function createMermaidRenderer(options: MermaidRendererOptions): MermaidR
 		try {
 			const mermaid = await ensureMermaid();
 			const id = `mermaid-fast-${++nextRenderId}`;
+			// Mermaid runs with securityLevel: 'strict' (see ensureMermaid below)
+			// so its own output is sanitized. Injection of the returned SVG via
+			// innerHTML is the documented integration path.
 			const { svg } = await mermaid.render(id, source);
 			const container = document.createElement('div');
 			container.className = 'markdown-fast-mermaid';
 			container.innerHTML = svg;
 			wrapper.replaceWith(container);
-		} catch {
-			// Bad syntax or runtime error — leave the code fence as-is and clear
-			// the marker so the user can retry by re-rendering. Mermaid errors
-			// are noisy; we silently fall through.
+		} catch (err) {
+			// Bad syntax in the diagram source is the common case and noisy by
+			// design (the user pastes broken syntax, sees no diagram, edits, etc.).
+			// We don't want to flood Sentry with those; only report when the
+			// error doesn't look like a parse/syntax problem so real runtime
+			// failures (e.g. dynamic import error) still surface.
 			codeEl.removeAttribute(MERMAID_RENDERED_ATTR);
+			const isLikelyParseError =
+				err instanceof Error &&
+				/parse|syntax|expecting/i.test(err.message + ' ' + (err.name ?? ''));
+			if (!isLikelyParseError) {
+				captureException(err, {
+					extra: {
+						component: 'markdownFast/mermaidRenderer',
+						sourcePreview: source.slice(0, 100),
+					},
+				});
+			}
 		}
 	};
 
@@ -108,9 +125,19 @@ export function createMermaidRenderer(options: MermaidRendererOptions): MermaidR
 			if (!observer) {
 				try {
 					observer = new IntersectionObserver(onIntersect, { rootMargin: '200px' });
-				} catch {
+				} catch (err) {
 					// Test environments may stub IntersectionObserver as a non-
-					// constructable mock; degrade gracefully.
+					// constructable mock; degrade gracefully. Only report when
+					// the message isn't the classic stub error.
+					const msg = err instanceof Error ? err.message : '';
+					if (!msg.includes('not a constructor')) {
+						captureException(err, {
+							extra: {
+								component: 'markdownFast/mermaidRenderer',
+								stage: 'IntersectionObserver',
+							},
+						});
+					}
 					return;
 				}
 			}

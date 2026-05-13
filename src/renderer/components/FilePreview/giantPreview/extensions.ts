@@ -51,8 +51,13 @@ export function buildBaseExtensions(): Extension {
 		// Keyboard-only focus support (the editor element still receives
 		// focus, just no caret).
 		EditorView.contentAttributes.of({ tabIndex: '0' }),
-		// Visual: a soft horizontal scroll instead of line wrap. Wrapping huge
-		// minified lines is more painful than scrolling.
+		// `lineWrapping` is intentional — Giant tier is the escalation target
+		// for files with pathologically long single lines (see
+		// LINE_LENGTH_GIANT_THRESHOLD in filePreviewUtils). Without wrapping,
+		// a single 500k-character line becomes a multi-million-pixel-wide
+		// DOM element and Chromium's wide-layer paint paths freeze the main
+		// thread. Wrapping costs readability on structured logs but avoids
+		// the freeze on the input shapes we explicitly route here.
 		EditorView.lineWrapping,
 	];
 }

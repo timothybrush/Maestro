@@ -14,11 +14,16 @@ import DOMPurify from 'dompurify';
  *   handler to the in-app file viewer).
  * - `ADD_ATTR` whitelists the two data attributes our link rewriter relies
  *   on; without these DOMPurify would strip them.
+ * - `FORBID_TAGS` explicitly removes form / input / button / select /
+ *   textarea / object / embed. DOMPurify keeps these by default, but a
+ *   preview pane has no use for them and they enable phishing-style
+ *   `<form action="evil">` patterns.
  */
 const PURIFY_CONFIG = {
 	ALLOWED_URI_REGEXP:
 		/^(?:(?:https?|ftp|mailto|tel|file|maestro-file):)|^[^a-z]|^[a-z+.\-]+(?:[^a-z+.\-:]|$)/i,
 	ADD_ATTR: ['target', 'data-maestro-file', 'data-maestro-image'] as string[],
+	FORBID_TAGS: ['form', 'input', 'button', 'select', 'textarea', 'object', 'embed'] as string[],
 };
 
 /**

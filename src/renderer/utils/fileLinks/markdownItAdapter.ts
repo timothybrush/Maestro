@@ -5,7 +5,7 @@ import {
 	validatePathReference,
 	type FileTreeIndices,
 } from './matcher';
-import { IMAGE_EMBED_PATTERN, WIKI_LINK_PATTERN } from './patterns';
+import { IMAGE_EMBED_PATTERN, PATH_PATTERN, WIKI_LINK_PATTERN } from './patterns';
 
 type ParserToken = ReturnType<MarkdownIt['parse']>[number];
 
@@ -284,11 +284,15 @@ function collectInlineMatches(text: string, indices: FileTreeIndices, cwd: strin
 	}
 
 	// Plain path references (e.g. `Folder/File.md` in running text) — but only
-	// when they validate exactly against the file tree. Use the simpler
-	// validatePathReference (no proximity scoring) to avoid surprise rewrites.
-	const PATH_RE = /\b(?:[A-Za-z0-9_-]+\/)+[A-Za-z0-9_.-]+\b/g;
+	// when they validate exactly against the file tree. Use the shared
+	// PATH_PATTERN from patterns.ts so this stays in lockstep with the Rich-tier
+	// remark plugin (the shared pattern also catches single-file references
+	// like `helpers.ts` with a recognized extension, which a local /\b…\b/
+	// would miss). PATH_PATTERN has the `g` flag, so reset lastIndex before
+	// each pass to keep the exec loop self-contained.
+	PATH_PATTERN.lastIndex = 0;
 	let pathMatch: RegExpExecArray | null;
-	while ((pathMatch = PATH_RE.exec(text)) !== null) {
+	while ((pathMatch = PATH_PATTERN.exec(text)) !== null) {
 		const inside = matches.some((m) => pathMatch!.index >= m.start && pathMatch!.index < m.end);
 		if (inside) continue;
 

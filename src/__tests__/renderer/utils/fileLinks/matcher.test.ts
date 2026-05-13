@@ -38,8 +38,8 @@ const makeTree = (paths: string[]): FileNode[] => {
 const indicesFrom = (paths: string[]): FileTreeIndices => buildFileTreeIndices(makeTree(paths));
 
 describe('calculateProximity', () => {
-	it('returns 0 when file is in the same directory as cwd', () => {
-		expect(calculateProximity('docs/x.md', 'docs')).toBe(1); // 0 up + 1 down to file
+	it('returns 1 when file is one level under cwd (0 steps up + 1 step down)', () => {
+		expect(calculateProximity('docs/x.md', 'docs')).toBe(1);
 	});
 
 	it('grows when the file lives deeper than the cwd', () => {

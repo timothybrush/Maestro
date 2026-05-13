@@ -36,10 +36,17 @@ export const WIKI_LINK_PATTERN = /\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g;
  * Relative path reference: `Folder/Subfolder/file.md` or `file.md`. Must
  * contain a slash OR end with a recognized extension. Negative lookbehind
  * `(?<![:\w])` and lookahead avoid matching URLs or words.
+ *
+ * The final filename segment is constrained to either `name.ext` (with a
+ * recognized extension) or a bare `name` (only when preceded by at least
+ * one folder segment, the wiki-link-style path). This prevents the greedy
+ * `[A-Za-z0-9_.-]+` of older versions from swallowing a sentence-ending
+ * period — e.g. in `See src/utils/helpers.ts.` we now match exactly
+ * `src/utils/helpers.ts` instead of `src/utils/helpers.ts.`.
  */
 export const PATH_PATTERN = new RegExp(
-	`(?<![:\\w])(?:(?:[A-Za-z0-9_-]+\\/)+[A-Za-z0-9_.-]+|[A-Za-z0-9_-]+\\.(?:${LINKABLE_EXTENSIONS}))(?![:\\w/])`,
-	'g'
+	`(?<![:\\w])(?:(?:[A-Za-z0-9_-]+\\/)+(?:[A-Za-z0-9_-]+\\.(?:${LINKABLE_EXTENSIONS})|[A-Za-z0-9_-]+)|[A-Za-z0-9_-]+\\.(?:${LINKABLE_EXTENSIONS}))(?![:\\w/])`,
+	'gi'
 );
 
 /**

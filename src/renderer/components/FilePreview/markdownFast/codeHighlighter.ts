@@ -16,6 +16,7 @@
  */
 
 import type { Theme } from '../../../constants/themes';
+import { captureException } from '../../../utils/sentry';
 
 type ShikiModule = typeof import('shiki');
 type Highlighter = Awaited<ReturnType<ShikiModule['createHighlighter']>>;
@@ -121,11 +122,14 @@ export function createCodeHighlighter(options: CodeHighlighterOptions): CodeHigh
 			// to keep DOM stable for prose CSS rules.
 			const inner = stripShikiWrapper(html);
 			el.innerHTML = inner;
-		} catch {
-			// Unsupported language or runtime error — leave the existing
-			// plain-text rendering intact and remove the marker so a future
-			// observation can retry.
+		} catch (err) {
+			// Unsupported language or runtime error — fall back to the existing
+			// plain-text rendering and clear the marker so a future observation
+			// can retry. Report so we hear about real Shiki regressions.
 			el.removeAttribute(HIGHLIGHTED_ATTR);
+			captureException(err, {
+				extra: { component: 'markdownFast/codeHighlighter', lang, themeName },
+			});
 		}
 	};
 
@@ -144,10 +148,21 @@ export function createCodeHighlighter(options: CodeHighlighterOptions): CodeHigh
 			if (!observer) {
 				try {
 					observer = new IntersectionObserver(onIntersect, { rootMargin: '200px' });
-				} catch {
+				} catch (err) {
 					// Test environments may stub IntersectionObserver as a non-
 					// constructable mock; degrade gracefully instead of crashing
-					// the component.
+					// the component. Only report when the message isn't the
+					// classic "is not a constructor" — that one is the test
+					// stub and would just spam Sentry.
+					const msg = err instanceof Error ? err.message : '';
+					if (!msg.includes('not a constructor')) {
+						captureException(err, {
+							extra: {
+								component: 'markdownFast/codeHighlighter',
+								stage: 'IntersectionObserver',
+							},
+						});
+					}
 					return;
 				}
 			}

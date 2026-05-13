@@ -83,10 +83,17 @@ describe('sanitizeBlock', () => {
 		expect(sanitizeBlock('<embed src="x">')).not.toContain('<embed');
 	});
 
-	it('strips dangerous <form> + <input> combos but leaves benign content', () => {
-		// DOMPurify defaults strip form elements; we don't override
+	it('strips <form> + <input> combos but leaves benign content', () => {
 		const out = sanitizeBlock('<form><input name="x"></form><p>safe</p>');
 		expect(out).toContain('<p>safe</p>');
+		expect(out).not.toContain('<form');
+		expect(out).not.toContain('<input');
+	});
+
+	it('strips <button>, <select>, <textarea> (phishing-surface tags)', () => {
+		expect(sanitizeBlock('<button>x</button>')).not.toContain('<button');
+		expect(sanitizeBlock('<select><option>y</option></select>')).not.toContain('<select');
+		expect(sanitizeBlock('<textarea>z</textarea>')).not.toContain('<textarea');
 	});
 
 	it('handles empty input', () => {

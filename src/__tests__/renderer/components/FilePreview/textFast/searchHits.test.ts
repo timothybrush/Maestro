@@ -68,15 +68,18 @@ describe('findTextHits', () => {
 		expect(findTextHits('', 'x', [])).toEqual([]);
 	});
 
-	it('handles matches at page boundaries (assigns to the page they start in)', () => {
-		// Content where 'needle' straddles the boundary between page 0 and page 1.
-		// pages of 2 lines, content with newlines after each.
+	it('handles matches that span a page boundary (assigns to the page they START in)', () => {
+		// 4 lines, 2 pages of 2: page 0 = lines 0-1, page 1 = lines 2-3.
+		// The query 'two\nline' starts on line 1 (page 0) and extends into
+		// line 2 (page 1), exercising the cross-page case. The hit should
+		// still be tagged with the page it starts in (0).
 		const haystack = 'line one\nline two\nline three\nline four';
-		// 4 lines, 2 pages of 2. Match 'one\nline' spans the line 0/1 boundary
-		// but stays within page 0.
 		const ps = paginate(haystack, 2);
-		const hits = findTextHits(haystack, 'one\nline', ps);
+		const hits = findTextHits(haystack, 'two\nline', ps);
 		expect(hits.length).toBe(1);
 		expect(hits[0].blockIndex).toBe(0);
+		// Sanity: the match's range straddles the page-0 boundary.
+		expect(hits[0].sourceOffset).toBeLessThan(ps[1].sourceStart);
+		expect(hits[0].sourceOffset + hits[0].length).toBeGreaterThan(ps[1].sourceStart);
 	});
 });

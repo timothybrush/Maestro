@@ -11,14 +11,16 @@
  */
 
 import React from 'react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterAll } from 'vitest';
 import { render } from '@testing-library/react';
 import { mockTheme } from '../../../../helpers/mockTheme';
 
 // CodeMirror 6 constructs MutationObserver / ResizeObserver / IntersectionObserver
 // inside its internal DOMObserver. The default test setup mocks
 // IntersectionObserver as a non-constructable vi.fn(), which crashes CM6. Swap
-// in a real class so `new IntersectionObserver(cb)` succeeds in jsdom.
+// in a real class so `new IntersectionObserver(cb)` succeeds in jsdom, then
+// restore the original in teardown so the swap doesn't leak into other
+// test files that share the worker.
 class StubIntersectionObserver {
 	observe() {}
 	unobserve() {}
@@ -27,11 +29,15 @@ class StubIntersectionObserver {
 		return [];
 	}
 }
-(
-	globalThis as typeof globalThis & {
-		IntersectionObserver: typeof IntersectionObserver;
-	}
-).IntersectionObserver = StubIntersectionObserver as unknown as typeof IntersectionObserver;
+const ioGlobal = globalThis as typeof globalThis & {
+	IntersectionObserver: typeof IntersectionObserver;
+};
+const originalIntersectionObserver = ioGlobal.IntersectionObserver;
+ioGlobal.IntersectionObserver = StubIntersectionObserver as unknown as typeof IntersectionObserver;
+
+afterAll(() => {
+	ioGlobal.IntersectionObserver = originalIntersectionObserver;
+});
 
 // Mock the searchBridge so we can assert open/close routing without poking
 // at CM6's real search panel (which would need a real layout).

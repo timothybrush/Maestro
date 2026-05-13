@@ -232,6 +232,10 @@ export function useFilePreviewSearch({
 		isJson,
 		isJqMode,
 		accentColor,
+		// The early-return guard reads `searchAdapter` to defer to the Fast/Giant
+		// tier's own search; include it in deps so flipping the tier chip
+		// re-runs the effect with the fresh adapter state.
+		searchAdapter,
 	]);
 
 	// Search matches in markdown preview mode - use CSS Custom Highlight API.
