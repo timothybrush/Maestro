@@ -5,6 +5,7 @@ import { buildBaseExtensions } from './extensions';
 import { buildEditorTheme } from './themeAdapter';
 import { loadLanguageExtension, hasLanguageSupport } from './languageLoader';
 import { findAllInDoc } from './searchEngine';
+import { softWrapLongLines, mapToWrappedOffset, SOFT_WRAP_MAX_LINE_LENGTH } from './softWrap';
 import type { GiantPreviewHandle, GiantPreviewProps } from './types';
 
 /**
@@ -44,13 +45,21 @@ export const GiantPreview = forwardRef<GiantPreviewHandle, GiantPreviewProps>(fu
 		[theme]
 	);
 
+	// Soft-wrap pathologically long lines so CM6's per-line measurement pass
+	// doesn't freeze the renderer. Lines under the threshold pass through
+	// unchanged. The insertion map lets the search handle navigate CM6 to
+	// the correct (wrapped) offset for a hit located against the ORIGINAL
+	// content — so a query that straddles a wrap boundary still matches.
+	const wrap = useMemo(() => softWrapLongLines(content, SOFT_WRAP_MAX_LINE_LENGTH), [content]);
+	const displayContent = wrap.wrapped;
+
 	// Mount / remount the editor when content, language or theme changes.
 	useEffect(() => {
 		const host = hostRef.current;
 		if (!host) return;
 
 		const state = EditorState.create({
-			doc: content,
+			doc: displayContent,
 			extensions: baseExtensions,
 		});
 
@@ -76,7 +85,7 @@ export const GiantPreview = forwardRef<GiantPreviewHandle, GiantPreviewProps>(fu
 			viewRef.current = null;
 			setIsReady(false);
 		};
-	}, [content, language, baseExtensions]);
+	}, [displayContent, language, baseExtensions]);
 
 	// Bridge CM6's content element (not the host) to the parent containerRef.
 	// useFilePreviewSearch walks this container for DOM ranges to register CSS
@@ -97,13 +106,12 @@ export const GiantPreview = forwardRef<GiantPreviewHandle, GiantPreviewProps>(fu
 		ref,
 		() => ({
 			findInContent: (query: string) => {
-				const view = viewRef.current;
-				if (!view) return [];
-				// `Text.toString()` materializes the full document. For Giant tier
-				// (capped well below 200MB by tier selection) this is acceptable —
-				// one pass per query change, gated by useFilePreviewSearch's count
-				// effect (B1) so navigation doesn't re-run it.
-				return findAllInDoc(view.state.doc.toString(), query);
+				// Search the ORIGINAL content (not view.state.doc which has the
+				// soft-wrap newlines). This keeps matches that straddle a wrap
+				// boundary findable — scrollToMatch will translate the source
+				// offset to the corresponding wrapped offset before dispatching.
+				if (!viewRef.current) return [];
+				return findAllInDoc(content, query);
 			},
 			scrollToMatch: (hit) => {
 				const view = viewRef.current;
@@ -112,15 +120,17 @@ export const GiantPreview = forwardRef<GiantPreviewHandle, GiantPreviewProps>(fu
 				// query shrinks the hit count below the current index.
 				if (!view || !hit) return;
 				const docLength = view.state.doc.length;
-				const from = Math.max(0, Math.min(hit.sourceOffset, docLength));
-				const to = Math.max(from, Math.min(hit.sourceOffset + hit.length, docLength));
+				const wrappedStart = mapToWrappedOffset(wrap.insertionsAt, hit.sourceOffset);
+				const wrappedEnd = mapToWrappedOffset(wrap.insertionsAt, hit.sourceOffset + hit.length);
+				const from = Math.max(0, Math.min(wrappedStart, docLength));
+				const to = Math.max(from, Math.min(wrappedEnd, docLength));
 				view.dispatch({
 					selection: EditorSelection.single(from, to),
 					effects: EditorView.scrollIntoView(from, { y: 'center' }),
 				});
 			},
 		}),
-		[]
+		[content, wrap.insertionsAt]
 	);
 
 	return (
