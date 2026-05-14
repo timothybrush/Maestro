@@ -87,7 +87,9 @@ export const GiantPreview = forwardRef<GiantPreviewHandle, GiantPreviewProps>(fu
 	useEffect(() => {
 		if (!containerRef) return;
 		const host = hostRef.current;
-		const contentEl = host?.querySelector<HTMLElement>('.cm-content') ?? host;
+		// `.cm-content` is a `<div>` in CM6, but querySelector returns the
+		// generic HTMLElement; widen to HTMLDivElement for the ref signature.
+		const contentEl = (host?.querySelector('.cm-content') as HTMLDivElement | null) ?? host;
 		containerRef.current = contentEl;
 	});
 
