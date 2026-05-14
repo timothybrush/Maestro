@@ -277,6 +277,55 @@ describe('useFilePreviewSearch — count vs navigate split', () => {
 		expect(adapter.scrollToMatch).toHaveBeenLastCalledWith(hits[1]);
 	});
 
+	it('does not crash when the new query shrinks hits below currentMatchIndex', async () => {
+		// Reproduces the race that crashed FilePreview with
+		// "Cannot read properties of undefined (reading 'blockIndex')":
+		// 1. Old query returned many hits, user navigated to index N.
+		// 2. New query returns fewer hits (< N+1). The count effect updates
+		//    hitsRef + dispatches setCurrentMatchIndex(0) in the same render,
+		//    but the navigate effect still reads the OLD currentMatchIndex
+		//    before React commits the new one. `hits[OLD_INDEX]` is undefined.
+		// The hook must guard this without crashing.
+		const manyHits: SearchHit[] = Array.from({ length: 10 }, (_, i) => ({
+			sourceOffset: i,
+			length: 3,
+			blockIndex: 0,
+			offsetWithinBlock: i,
+		}));
+		const oneHit: SearchHit[] = [
+			{ sourceOffset: 0, length: 3, blockIndex: 0, offsetWithinBlock: 0 },
+		];
+		// findHits return depends on the active query — flip the array when
+		// the query changes to simulate a shrinking result set.
+		const findHitsSpy = vi.fn((q: string) => {
+			if (q === 'aaa') return manyHits;
+			if (q === 'bbb') return oneHit;
+			return [];
+		});
+		const adapter = makeAdapter([], findHitsSpy);
+		const { handle } = renderHost({ adapter });
+
+		// Get to a high index against the long results.
+		await act(async () => {
+			handle.setSearchQuery('aaa');
+		});
+		for (let i = 0; i < 9; i++) {
+			await act(async () => {
+				handle.goToNextMatch();
+			});
+		}
+		expect(handle.getCurrentMatchIndex()).toBe(9);
+
+		// Switch to a query with only one hit. The navigate effect may fire
+		// once with the old index against the new hits array; it must NOT
+		// throw. The next render commits index 0 and recovers.
+		await act(async () => {
+			handle.setSearchQuery('bbb');
+		});
+		expect(handle.getTotalMatches()).toBe(1);
+		expect(handle.getCurrentMatchIndex()).toBe(0);
+	});
+
 	it('clears Highlights when the query is cleared', async () => {
 		const hits: SearchHit[] = [{ sourceOffset: 0, length: 5, blockIndex: 0, offsetWithinBlock: 0 }];
 		const adapter = makeAdapter(hits);

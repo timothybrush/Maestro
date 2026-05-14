@@ -411,11 +411,24 @@ export function useFilePreviewSearch({
 		const escapedQuery = searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 		if (hits && searchAdapter) {
+			// Out-of-range guard. When a new query reduces the hit count, the
+			// count effect dispatches setCurrentMatchIndex(0) AND updates
+			// hitsRef in the same effect-pass. But React fires both effects of
+			// the SAME render before committing the new state, so this navigate
+			// effect can read the previous render's currentMatchIndex (e.g. 51)
+			// while hitsRef already holds the new shorter array (e.g. 5 hits).
+			// `hits[51]` is undefined → scrollToMatch would crash with
+			// "Cannot read properties of undefined (reading 'blockIndex')".
+			// Clamp and skip when out of range; the next render committed by
+			// the count effect's setState will re-fire navigate at the correct
+			// index.
+			const safeIdx = Math.min(currentMatchIndex, hits.length - 1);
+			if (safeIdx < 0 || !hits[safeIdx]) return;
 			// Fast/Giant: tell the tier to scroll its virtualizer. After the
 			// next paint, re-walk the DOM (cheap — only mounted text nodes) and
 			// refresh both Highlight registrations so the user sees up-to-date
 			// highlights in the newly-mounted block.
-			searchAdapter.scrollToMatch(hits[currentMatchIndex]);
+			searchAdapter.scrollToMatch(hits[safeIdx]);
 			const raf = requestAnimationFrame(() => {
 				if (!markdownContainerRef.current) return;
 				const ranges = walkContainerForRanges(markdownContainerRef.current, escapedQuery);

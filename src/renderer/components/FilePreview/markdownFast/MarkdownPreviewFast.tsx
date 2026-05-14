@@ -81,7 +81,12 @@ export const MarkdownPreviewFast = forwardRef<MarkdownPreviewFastHandle, Markdow
 					return findHits(contentRef.current, query, blockRanges);
 				},
 				scrollToMatch: (hit) => {
-					if (hit.blockIndex < 0 || hit.blockIndex >= blocksRef.current.length) return;
+					// Defensive: an out-of-range index in useFilePreviewSearch can
+					// occasionally pass undefined here during the same-render race
+					// between count-effect setState and navigate-effect dispatch.
+					if (!hit || hit.blockIndex < 0 || hit.blockIndex >= blocksRef.current.length) {
+						return;
+					}
 					virtuosoRef.current?.scrollToIndex({
 						index: hit.blockIndex,
 						align: 'center',

@@ -121,6 +121,10 @@ export const TextPreviewFast = forwardRef<TextPreviewFastHandle, TextPreviewFast
 				getPageCount: () => pagesRef.current.length,
 				findInContent: (query: string) => findTextHits(contentRef.current, query, pagesRef.current),
 				scrollToMatch: (hit) => {
+					// Defensive: same-render race between the count effect's
+					// setCurrentMatchIndex(0) and the navigate effect's dispatch
+					// can pass undefined when a new query shrinks the hits array.
+					if (!hit) return;
 					const idx = hit.blockIndex;
 					if (idx < 0 || idx >= pagesRef.current.length) return;
 					virtualizer.scrollToIndex(idx, { align: 'center' });

@@ -107,7 +107,10 @@ export const GiantPreview = forwardRef<GiantPreviewHandle, GiantPreviewProps>(fu
 			},
 			scrollToMatch: (hit) => {
 				const view = viewRef.current;
-				if (!view) return;
+				// Defensive: same-render race between useFilePreviewSearch's
+				// count + navigate effects can pass undefined when a fresh
+				// query shrinks the hit count below the current index.
+				if (!view || !hit) return;
 				const docLength = view.state.doc.length;
 				const from = Math.max(0, Math.min(hit.sourceOffset, docLength));
 				const to = Math.max(from, Math.min(hit.sourceOffset + hit.length, docLength));
