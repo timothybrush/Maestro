@@ -1,10 +1,10 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
-import { EditorState, StateEffect, type Extension } from '@codemirror/state';
+import { EditorState, EditorSelection, StateEffect, type Extension } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import { buildBaseExtensions } from './extensions';
 import { buildEditorTheme } from './themeAdapter';
 import { loadLanguageExtension, hasLanguageSupport } from './languageLoader';
-import { openSearch, closeSearch } from './searchBridge';
+import { findAllInDoc } from './searchEngine';
 import type { GiantPreviewHandle, GiantPreviewProps } from './types';
 
 /**
@@ -87,19 +87,25 @@ export const GiantPreview = forwardRef<GiantPreviewHandle, GiantPreviewProps>(fu
 	useImperativeHandle(
 		ref,
 		() => ({
-			openSearch: (initialQuery?: string) => {
-				if (viewRef.current) openSearch(viewRef.current, initialQuery);
+			findInContent: (query: string) => {
+				const view = viewRef.current;
+				if (!view) return [];
+				// `Text.toString()` materializes the full document. For Giant tier
+				// (capped well below 200MB by tier selection) this is acceptable —
+				// one pass per query change, gated by useFilePreviewSearch's count
+				// effect (B1) so navigation doesn't re-run it.
+				return findAllInDoc(view.state.doc.toString(), query);
 			},
-			closeSearch: () => {
-				if (viewRef.current) closeSearch(viewRef.current);
-			},
-			// Giant tier doesn't enumerate matches — CM6's panel handles
-			// everything. The adapter contract still wants a function, so we
-			// return an empty array and the no-match path in the hook just
-			// shows "0 of 0" while the user uses CM6's panel directly.
-			findInContent: () => [],
-			scrollToMatch: () => {
-				/* CM6 search handles its own scrolling */
+			scrollToMatch: (hit) => {
+				const view = viewRef.current;
+				if (!view) return;
+				const docLength = view.state.doc.length;
+				const from = Math.max(0, Math.min(hit.sourceOffset, docLength));
+				const to = Math.max(from, Math.min(hit.sourceOffset + hit.length, docLength));
+				view.dispatch({
+					selection: EditorSelection.single(from, to),
+					effects: EditorView.scrollIntoView(from, { y: 'center' }),
+				});
 			},
 		}),
 		[]

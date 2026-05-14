@@ -938,14 +938,9 @@ export const FilePreview = React.memo(
 			if (e.key === 'f' && (e.metaKey || e.ctrlKey)) {
 				e.preventDefault();
 				e.stopPropagation();
-				// Giant tier: hand off to CodeMirror's native search panel.
-				// CM6 owns its own panel UI; layering the in-app search bar on
-				// top would just duplicate the count display while CM6 does the
-				// real work.
-				if (previewTier === 'giant' && giantRef.current) {
-					giantRef.current.openSearch();
-					return;
-				}
+				// All three tiers (Rich / Fast / Giant) now share the same search
+				// bar. Giant tier exposes findInContent/scrollToMatch through its
+				// adapter so the count + navigation flow through the same UI.
 				setSearchOpen(true);
 				setTimeout(() => searchInputRef.current?.focus(), 0);
 			} else if (e.key === 's' && (e.metaKey || e.ctrlKey) && isEditableText && markdownEditMode) {

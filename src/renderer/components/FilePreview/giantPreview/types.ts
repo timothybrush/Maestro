@@ -8,15 +8,11 @@ import type { SearchHit } from '../search/types';
  *
  * `findInContent` enumerates every match in the loaded document; pure scan
  * over the source string is acceptable up to the Giant tier's size ceiling
- * (one full pass per query). `scrollToMatch` selects the matched range and
- * scrolls the CM6 viewport — CM6's selection rendering then paints the
- * active match indicator for free.
+ * (one full pass per query, gated by useFilePreviewSearch's count effect).
+ * `scrollToMatch` selects the matched range and scrolls the CM6 viewport —
+ * CM6's selection rendering paints the active match indicator for free.
  */
 export interface GiantPreviewHandle {
-	/** Open CodeMirror's built-in search panel and focus its input. */
-	openSearch(initialQuery?: string): void;
-	/** Close CodeMirror's search panel. */
-	closeSearch(): void;
 	/** Find every occurrence of `query` in the loaded source. Empty query → []. */
 	findInContent(query: string): SearchHit[];
 	/** Select + scroll the matched range into view. No-op on out-of-range offsets. */
