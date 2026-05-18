@@ -61,16 +61,18 @@ describe('subscriptionsToPipelines', () => {
 			config: { interval_minutes: 10 },
 		});
 
-		// Agent should have the input prompt
+		// Agent carries the session identity but NOT the prompt — trigger-fed
+		// prompts live on the edge (single source of truth for that path).
 		expect(agents[0].data).toMatchObject({
 			sessionName: 'worker',
-			inputPrompt: 'Do the work',
+			inputPrompt: undefined,
 		});
 
-		// Should have one edge connecting them
+		// Should have one edge connecting them, carrying the prompt.
 		expect(pipelines[0].edges).toHaveLength(1);
 		expect(pipelines[0].edges[0].source).toBe(triggers[0].id);
 		expect(pipelines[0].edges[0].target).toBe(agents[0].id);
+		expect(pipelines[0].edges[0].prompt).toBe('Do the work');
 	});
 
 	it('converts trigger -> agent1 -> agent2 chain', () => {
