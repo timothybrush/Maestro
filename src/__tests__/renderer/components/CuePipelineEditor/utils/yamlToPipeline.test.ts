@@ -585,6 +585,33 @@ describe('subscriptionsToPipelines', () => {
 			expect(edge.mode).toBe('pass');
 		}
 	});
+
+	// Regression: the trigger→agent prompt used to be mirrored onto both
+	// `edge.prompt` AND `agentData.inputPrompt`. The AgentConfigPanel textarea
+	// wrote to inputPrompt while `pipelineToYaml` read edge.prompt first, so
+	// user edits silently dropped on save. The mirror is gone; edge.prompt is
+	// the single source of truth for trigger-fed agents.
+	it('trigger→agent prompt loads to edge.prompt only and leaves agent inputPrompt undefined', () => {
+		const subs: CueSubscription[] = [
+			{
+				name: 'pr-triage',
+				event: 'github.pull_request',
+				enabled: true,
+				repo: 'foo/bar',
+				poll_minutes: 30,
+				prompt: 'Review the PR carefully',
+				agent_id: 'session-0',
+			},
+		];
+		const sessions = makeSessions('reviewer');
+
+		const pipelines = subscriptionsToPipelines(subs, sessions);
+		const agentNode = pipelines[0].nodes.find((n) => n.type === 'agent');
+		const triggerEdge = pipelines[0].edges.find((e) => e.target === agentNode!.id);
+
+		expect(triggerEdge?.prompt).toBe('Review the PR carefully');
+		expect((agentNode!.data as AgentNodeData).inputPrompt).toBeUndefined();
+	});
 });
 
 describe('subscriptionsToPipelines — target_node_key dedup', () => {
