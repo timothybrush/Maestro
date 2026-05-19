@@ -188,9 +188,13 @@ export const AGENT_DEFINITIONS: AgentDefinition[] = [
 		readOnlyArgs: ['--permission-mode', 'plan'], // Read-only/plan mode
 		readOnlyCliEnforced: true, // CLI enforces read-only via --permission-mode plan
 		modelArgs: (modelId: string) => ['--model', modelId], // Model selection: claude --model sonnet
-		// Batch-mode env vars (CLI `maestro-cli send` default path only — not --live, not desktop UI).
-		// Background tasks cannot complete before a short-lived batch session exits, so results are lost (#861).
-		batchModeEnvVars: {
+		// Disable Claude Code's background-task feature across every spawn path (desktop UI, CLI batch, --live, SSH).
+		// Two motivations: (a) batch sessions exit before background tasks finish, losing results (#861); and (b) the
+		// `Bash run_in_background` + `Monitor` poll wrapper deadlocks on a self-matching `pgrep -f` when the watched
+		// regex appears in the wrapper's own argv — observed multiple times in long-running desktop tabs, where the
+		// claude process sits forever waiting on a zsh `until` loop that can never satisfy its exit predicate.
+		// Users who need background tasks can override via Shell Configuration or per-agent customEnvVars.
+		defaultEnvVars: {
 			CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: '1',
 		},
 		configOptions: [
