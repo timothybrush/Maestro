@@ -17,6 +17,7 @@ export interface SearchableSetting {
 	id: string;
 	/** Which tab this setting lives in */
 	tab:
+		| 'about'
 		| 'general'
 		| 'display'
 		| 'shortcuts'
@@ -1069,9 +1070,35 @@ export const PROMPTS_SETTINGS: SearchableSetting[] = [
 ];
 
 // ---------------------------------------------------------------------------
+// About Tab
+// ---------------------------------------------------------------------------
+export const ABOUT_SETTINGS: SearchableSetting[] = [
+	{
+		id: 'about-maestro',
+		tab: 'about',
+		tabLabel: 'About',
+		label: 'About Maestro',
+		description: 'Maestro version, tagline, and origin — born on Nov 26, 2025 in Austin, TX',
+		keywords: [
+			'about',
+			'version',
+			'maestro',
+			'tagline',
+			'origin',
+			'austin',
+			'texas',
+			'born',
+			'commit',
+			'build',
+		],
+	},
+];
+
+// ---------------------------------------------------------------------------
 // Composed registry
 // ---------------------------------------------------------------------------
 export const ALL_SEARCHABLE_SETTINGS: SearchableSetting[] = [
+	...ABOUT_SETTINGS,
 	...GENERAL_SETTINGS,
 	...DISPLAY_SETTINGS,
 	...SHORTCUTS_SETTINGS,

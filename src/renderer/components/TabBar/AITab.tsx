@@ -1,10 +1,11 @@
 import React, { useState, useCallback, useEffect, useRef, memo, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Star, Pencil, Loader2, AlertCircle } from 'lucide-react';
+import { X, Star, Pencil, Loader2, AlertCircle, MessageSquare } from 'lucide-react';
 import type { AITab as AITabType, Theme } from '../../types';
 import { safeClipboardWrite } from '../../utils/clipboard';
 import { buildSessionDeepLink } from '../../../shared/deep-link-urls';
 import { useTabHoverOverlay } from '../../hooks/tabs/useTabHoverOverlay';
+import { getTabKindColor } from './tabBarUtils';
 import { AITabOverlayMenu } from './AITabOverlayMenu';
 import { WizardIndicator } from '../SessionList/WizardIndicator';
 
@@ -514,6 +515,13 @@ export const AITab = memo(function AITab({
 					{shortcutHint}
 				</span>
 			)}
+
+			{/* Kind icon - identifies this as an AI chat tab, always visible (active or not) */}
+			<MessageSquare
+				className="w-3.5 h-3.5 shrink-0"
+				style={{ color: getTabKindColor('ai', theme) }}
+				aria-hidden="true"
+			/>
 
 			{/* Tab name - show full name for active tab, truncate inactive tabs */}
 			<span

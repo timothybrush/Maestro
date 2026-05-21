@@ -368,6 +368,30 @@ export function getParentDir(path: string): string {
 }
 
 /**
+ * Returns true if `path` is an absolute filesystem path.
+ *
+ * Matches Unix absolute paths (`/foo`), Windows drive paths (`C:\foo`,
+ * `C:/foo`), and UNC / drive-relative paths starting with a backslash
+ * (`\\server\share`, `\foo`).
+ */
+export function isAbsolutePath(path: string): boolean {
+	if (!path) return false;
+	return /^(\/|\\|[a-zA-Z]:[/\\])/.test(path);
+}
+
+/**
+ * Extract the final path segment (file or folder name) from a path.
+ * Handles both `/` and `\` separators and ignores a trailing separator.
+ * Returns the input unchanged when it contains no separators.
+ */
+export function getBasename(path: string): string {
+	if (!path) return '';
+	const trimmed = path.replace(/[/\\]+$/, '');
+	const parts = trimmed.split(/[/\\]/);
+	return parts[parts.length - 1] || trimmed;
+}
+
+/**
  * Truncate command text for display.
  * Replaces newlines with spaces, trims whitespace, and adds ellipsis if truncated.
  *

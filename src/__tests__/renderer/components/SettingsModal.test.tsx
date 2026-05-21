@@ -32,6 +32,11 @@ import type {
 	AgentConfig,
 } from '../../../renderer/types';
 
+// __APP_VERSION__ / __COMMIT_HASH__ are injected by the bundler at build time.
+// The About tab renders them, so stub them for the jsdom test environment.
+(globalThis as unknown as { __APP_VERSION__: string }).__APP_VERSION__ = '1.0.0';
+(globalThis as unknown as { __COMMIT_HASH__: string }).__COMMIT_HASH__ = '';
+
 // Mock the LayerStackContext
 vi.mock('../../../renderer/contexts/LayerStackContext', () => ({
 	useLayerStack: vi.fn(() => ({
@@ -637,7 +642,7 @@ describe('SettingsModal', () => {
 
 	describe('keyboard tab navigation', () => {
 		// Sidebar is alphabetized by label, so the order under no LLM flag is:
-		// AI Commands, Display, Encore Features, Environment, General,
+		// About, AI Commands, Display, Encore Features, Environment, General,
 		// Maestro Prompts, Notifications, Shortcuts, SSH Hosts, Themes.
 		it('should navigate to next tab with Cmd+Shift+] from default (general)', async () => {
 			render(<SettingsModal {...createDefaultProps({ initialTab: 'general' })} />);
@@ -690,25 +695,25 @@ describe('SettingsModal', () => {
 			// Themes is the last tab alphabetically
 			expect(screen.getByText('dark Mode')).toBeInTheDocument();
 
-			// Press Cmd+Shift+] to wrap to AI Commands (first tab alphabetically)
+			// Press Cmd+Shift+] to wrap to About (first tab alphabetically)
 			fireEvent.keyDown(window, { key: ']', metaKey: true, shiftKey: true });
 
 			await act(async () => {
 				await vi.advanceTimersByTimeAsync(100);
 			});
 
-			expect(screen.getByTestId('ai-commands-panel')).toBeInTheDocument();
+			expect(screen.getByTitle('About')).toHaveClass('font-bold');
 		});
 
-		it('should wrap around when navigating before first tab (AI Commands)', async () => {
-			render(<SettingsModal {...createDefaultProps({ initialTab: 'aicommands' })} />);
+		it('should wrap around when navigating before first tab (About)', async () => {
+			render(<SettingsModal {...createDefaultProps({ initialTab: 'about' })} />);
 
 			await act(async () => {
 				await vi.advanceTimersByTimeAsync(50);
 			});
 
-			// AI Commands is the first tab alphabetically
-			expect(screen.getByTestId('ai-commands-panel')).toBeInTheDocument();
+			// About is the first tab alphabetically
+			expect(screen.getByTitle('About')).toHaveClass('font-bold');
 
 			// Press Cmd+Shift+[ to wrap to Themes (last tab alphabetically)
 			fireEvent.keyDown(window, { key: '[', metaKey: true, shiftKey: true });

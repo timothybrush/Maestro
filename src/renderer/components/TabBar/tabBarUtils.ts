@@ -1,4 +1,33 @@
-import type { UnifiedTab } from '../../types';
+import type { Theme, UnifiedTab } from '../../types';
+
+/** The kind of content a tab holds — matches the UnifiedTab discriminant. */
+export type TabKind = UnifiedTab['type'];
+
+/**
+ * Signature color for each tab kind, derived from the active theme so the
+ * palette tracks light/dark/vibe themes. Used to tint the leading kind icon
+ * on every tab (active or inactive) so the eye can differentiate tab kinds
+ * at a glance:
+ * - ai      → accent  (the brand/primary hue)
+ * - browser → ansiBlue (falls back to accent on themes without ANSI colors)
+ * - file    → warning (yellow/orange)
+ * - terminal→ success (green) — note terminal tabs additionally override the
+ *             icon color with their run-state, so this is just the idle base.
+ */
+export function getTabKindColor(kind: TabKind, theme: Theme): string {
+	switch (kind) {
+		case 'ai':
+			return theme.colors.accent;
+		case 'browser':
+			return theme.colors.ansiBlue ?? theme.colors.accent;
+		case 'file':
+			return theme.colors.warning;
+		case 'terminal':
+			return theme.colors.success;
+		default:
+			return theme.colors.textDim;
+	}
+}
 
 /**
  * Determine if a unified tab is currently active, based on tab type and input mode.
