@@ -26,6 +26,34 @@ import { captureException } from '../sentry';
 type ShikiModule = typeof import('shiki');
 type Highlighter = Awaited<ReturnType<ShikiModule['createHighlighter']>>;
 
+type ShikiApi = Pick<
+	ShikiModule,
+	'createHighlighter' | 'bundledLanguagesInfo' | 'bundledLanguagesAlias'
+>;
+
+/**
+ * Dynamic imports through Vite 8 / Rolldown sometimes hand back a module
+ * where the runtime API lives under `.default` (CJS interop) instead of the
+ * top-level namespace. This matches the same defensive normaliser the
+ * `languageDetect` module applies to `highlight.js` — silently picking the
+ * wrong shape is exactly what would produce "Shiki loaded but
+ * `createHighlighter` is undefined → catch → fallback → no colors".
+ */
+function isShikiApi(value: unknown): value is ShikiApi {
+	return (
+		typeof value === 'object' &&
+		value !== null &&
+		typeof (value as { createHighlighter?: unknown }).createHighlighter === 'function'
+	);
+}
+
+function normalizeShikiModule(mod: unknown): ShikiApi {
+	if (isShikiApi(mod)) return mod;
+	const defaultExport = (mod as { default?: unknown }).default;
+	if (isShikiApi(defaultExport)) return defaultExport;
+	throw new Error('shiki module did not expose createHighlighter');
+}
+
 /** Languages preloaded with the highlighter to cover the common cases hot. */
 export const PRELOADED_LANGUAGES = [
 	'javascript',
@@ -84,24 +112,14 @@ let bundledAliasMapPromise: Promise<Map<string, string>> | null = null;
 /**
  * Get (or lazily create) the singleton Shiki highlighter. Both light/dark
  * themes are preloaded so callers can switch without an extra round trip.
- *
- * Engine: we explicitly use Shiki's JavaScript regex engine instead of the
- * default Oniguruma WASM engine. Oniguruma needs a `.wasm` asset that Vite's
- * renderer bundle does not serve out-of-the-box in Electron, which caused
- * `createHighlighter` to throw silently (colours never appeared). The JS
- * engine is bundler-friendly and covers every TextMate grammar Shiki ships.
  */
 export function getHighlighter(): Promise<Highlighter> {
 	if (highlighterPromise) return highlighterPromise;
 	highlighterPromise = (async () => {
-		const [shiki, jsEngine] = await Promise.all([
-			import('shiki'),
-			import('shiki/engine/javascript'),
-		]);
+		const shiki = normalizeShikiModule(await import('shiki'));
 		return shiki.createHighlighter({
 			themes: [LIGHT_THEME, DARK_THEME],
 			langs: [...PRELOADED_LANGUAGES],
-			engine: jsEngine.createJavaScriptRegexEngine(),
 		});
 	})();
 	return highlighterPromise;
@@ -115,10 +133,33 @@ export function getHighlighter(): Promise<Highlighter> {
 export async function getBundledLanguageIds(): Promise<Set<string>> {
 	if (bundledLanguagesPromise) return bundledLanguagesPromise;
 	bundledLanguagesPromise = (async () => {
-		const shiki = await import('shiki');
+		const shiki = normalizeShikiModule(await import('shiki'));
 		return new Set(shiki.bundledLanguagesInfo.map((l) => l.id));
 	})();
 	return bundledLanguagesPromise;
+}
+
+export interface BundledLanguageEntry {
+	id: string;
+	name: string;
+	aliases: string[];
+}
+
+/**
+ * Returns the full bundled-language list with names + aliases, sorted by
+ * display name. Used by the LanguagePicker to populate its dropdown. Goes
+ * through the same shape-normaliser as the highlighter to dodge Vite/Rolldown
+ * default-export interop quirks.
+ */
+export async function getBundledLanguageEntries(): Promise<BundledLanguageEntry[]> {
+	const shiki = normalizeShikiModule(await import('shiki'));
+	return shiki.bundledLanguagesInfo
+		.map((info) => ({
+			id: info.id,
+			name: info.name ?? info.id,
+			aliases: info.aliases ?? [],
+		}))
+		.sort((a, b) => a.name.localeCompare(b.name));
 }
 
 /**
@@ -129,7 +170,7 @@ export async function getBundledLanguageIds(): Promise<Set<string>> {
 async function getAliasMap(): Promise<Map<string, string>> {
 	if (bundledAliasMapPromise) return bundledAliasMapPromise;
 	bundledAliasMapPromise = (async () => {
-		const shiki = await import('shiki');
+		const shiki = normalizeShikiModule(await import('shiki'));
 		const map = new Map<string, string>();
 		// `bundledLanguagesInfo` carries each canonical id plus its aliases,
 		// which is everything we need. We deliberately ignore Shiki's

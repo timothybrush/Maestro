@@ -490,6 +490,22 @@ export function BatchRunnerModal(props: BatchRunnerModalProps) {
 						Auto Run Configuration
 					</h2>
 					<div className="flex items-center gap-4">
+						{/* Agent thinking pill — shown only while the session agent is busy.
+						    Lives in the header (rather than over the Go button) so it stays
+						    visible without forcing the modal footer to grow. */}
+						{isAgentBusy && (
+							<div
+								className="flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-semibold whitespace-nowrap"
+								style={{
+									backgroundColor: theme.colors.warning,
+									color: theme.colors.bgMain,
+									border: `1px solid ${theme.colors.warning}`,
+								}}
+							>
+								<Brain className="w-2.5 h-2.5 animate-pulse" />
+								<span>Agent thinking</span>
+							</div>
+						)}
 						{/* Total Task Count Badge */}
 						<div
 							className="flex items-center gap-2 px-3 py-1.5 rounded-lg"
@@ -894,11 +910,9 @@ export function BatchRunnerModal(props: BatchRunnerModalProps) {
 					</div>
 				</div>
 
-				{/* Footer — extra bottom padding while the agent is busy so the
-				    "Agent thinking" pill sitting beneath the Go button has room
-				    and doesn't get clipped by the modal edge. */}
+				{/* Footer */}
 				<div
-					className={`px-4 pt-4 border-t flex items-center justify-between shrink-0 ${isAgentBusy ? 'pb-9' : 'pb-4'}`}
+					className="p-4 border-t flex items-center justify-between shrink-0"
 					style={{ borderColor: theme.colors.border }}
 				>
 					{/* Left side: Auto-follow toggle + Hint */}
@@ -951,23 +965,20 @@ export function BatchRunnerModal(props: BatchRunnerModalProps) {
 							<Save className="w-4 h-4" />
 							Save
 						</button>
-						<div className="relative">
-							{isAgentBusy && (
-								<div
-									className="pointer-events-none absolute -bottom-6 right-0 flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap shadow-sm z-10"
-									style={{
-										backgroundColor: theme.colors.warning,
-										color: theme.colors.bgMain,
-										border: `1px solid ${theme.colors.warning}`,
-									}}
-								>
-									<Brain className="w-2.5 h-2.5 animate-pulse" />
-									<span>Agent thinking</span>
-								</div>
-							)}
-							<button
-								onClick={handleGo}
-								disabled={
+						<button
+							onClick={handleGo}
+							disabled={
+								isPreparingWorktree ||
+								hasNoTasks ||
+								documents.length === 0 ||
+								documents.length === missingDocCount ||
+								isPromptEmpty ||
+								!hasValidPrompt ||
+								isAgentBusy
+							}
+							className="flex items-center gap-2 px-4 py-2 rounded text-white font-bold disabled:opacity-40 disabled:cursor-not-allowed"
+							style={{
+								backgroundColor:
 									isPreparingWorktree ||
 									hasNoTasks ||
 									documents.length === 0 ||
@@ -975,42 +986,30 @@ export function BatchRunnerModal(props: BatchRunnerModalProps) {
 									isPromptEmpty ||
 									!hasValidPrompt ||
 									isAgentBusy
-								}
-								className="flex items-center gap-2 px-4 py-2 rounded text-white font-bold disabled:opacity-40 disabled:cursor-not-allowed"
-								style={{
-									backgroundColor:
-										isPreparingWorktree ||
-										hasNoTasks ||
-										documents.length === 0 ||
-										documents.length === missingDocCount ||
-										isPromptEmpty ||
-										!hasValidPrompt ||
-										isAgentBusy
-											? theme.colors.textDim
-											: theme.colors.accent,
-								}}
-								title={
-									isPreparingWorktree
-										? 'Preparing worktree...'
-										: isAgentBusy
-											? 'Agent is thinking — finish or interrupt the current task before launching auto-run'
-											: isPromptEmpty
-												? 'Agent prompt cannot be empty'
-												: !hasValidPrompt
-													? 'Agent prompt must reference Markdown tasks (e.g., checkbox syntax "- [ ]")'
-													: documents.length === 0
-														? 'No documents selected'
-														: documents.length === missingDocCount
-															? 'All selected documents are missing'
-															: hasNoTasks
-																? 'No unchecked tasks in documents'
-																: 'Start auto-run'
-								}
-							>
-								{isPreparingWorktree ? <Spinner size={16} /> : <Play className="w-4 h-4" />}
-								{isPreparingWorktree ? 'Preparing Worktree...' : 'Go'}
-							</button>
-						</div>
+										? theme.colors.textDim
+										: theme.colors.accent,
+							}}
+							title={
+								isPreparingWorktree
+									? 'Preparing worktree...'
+									: isAgentBusy
+										? 'Agent is thinking — finish or interrupt the current task before launching auto-run'
+										: isPromptEmpty
+											? 'Agent prompt cannot be empty'
+											: !hasValidPrompt
+												? 'Agent prompt must reference Markdown tasks (e.g., checkbox syntax "- [ ]")'
+												: documents.length === 0
+													? 'No documents selected'
+													: documents.length === missingDocCount
+														? 'All selected documents are missing'
+														: hasNoTasks
+															? 'No unchecked tasks in documents'
+															: 'Start auto-run'
+							}
+						>
+							{isPreparingWorktree ? <Spinner size={16} /> : <Play className="w-4 h-4" />}
+							{isPreparingWorktree ? 'Preparing Worktree...' : 'Go'}
+						</button>
 					</div>
 				</div>
 			</div>
