@@ -17,7 +17,7 @@ interface CollapsedSessionPillProps {
 	setActiveSessionId: (id: string) => void;
 }
 
-const MAX_PILLS_PER_ROW = 25;
+const MAX_PILLS_PER_ROW = 20;
 
 type CollapsedSessionPillRowsProps = Omit<CollapsedSessionPillProps, 'session'> & {
 	sessions: Session[];
