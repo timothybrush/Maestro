@@ -1034,6 +1034,12 @@ export function useBatchRunner({
 									}
 								);
 
+								// Whether another playbook document follows this one. `documents.length > 1`
+								// was wrong for the last doc in a multi-doc run — it would tell the
+								// user we were skipping to the next document when the batch was
+								// actually about to end.
+								const hasNextDocument = docIndex < documents.length - 1;
+
 								// Add a history entry specifically for this stalled document
 								const stallExplanation = [
 									`**Document Stalled: ${docEntry.filename}**`,
@@ -1051,7 +1057,7 @@ export function useBatchRunner({
 									'',
 									`**Remaining unchecked tasks:** ${newRemainingTasks}`,
 									'',
-									documents.length > 1
+									hasNextDocument
 										? `Skipping to the next document in the playbook...`
 										: `No more documents to process.`,
 								].join('\n');
@@ -1064,6 +1070,21 @@ export function useBatchRunner({
 									projectPath: effectiveCwd,
 									sessionId: sessionId,
 									success: false, // Mark as unsuccessful since we couldn't complete
+								});
+
+								// Surface the stall in a toast so the user sees it without having to
+								// open the history panel — pre-toast, silent stalls (token exhaustion,
+								// watchdog timeouts, agents that loop writing "I did nothing" notes)
+								// could go unnoticed for hours. Yellow/warning conveys "we noticed
+								// something is wrong and stopped this doc," click jumps to the session.
+								notifyToast({
+									type: 'warning',
+									title: isWatchdogFailure ? 'Auto Run agent stalled' : 'Auto Run document stalled',
+									message: hasNextDocument
+										? `${docEntry.filename}: ${newRemainingTasks} task${newRemainingTasks === 1 ? '' : 's'} remaining. Skipping to next document.`
+										: `${docEntry.filename}: ${newRemainingTasks} task${newRemainingTasks === 1 ? '' : 's'} remaining. No more documents to process.`,
+									project: session.name,
+									sessionId,
 								});
 
 								// Skip to the next document instead of breaking the entire batch
