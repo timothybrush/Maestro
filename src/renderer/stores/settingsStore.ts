@@ -408,6 +408,7 @@ export interface SettingsStoreState {
 	showWorktreePill: boolean;
 	showWorktreeBranchName: boolean;
 	showLeftPanelGroupMemberCount: boolean;
+	leftPanelCollapsedPillsPerRow: number;
 	showLeftPanelLocationPills: boolean;
 	showLeftPanelGitIndicator: boolean;
 	showLeftPanelCueIndicator: boolean;
@@ -540,6 +541,7 @@ export interface SettingsStoreActions {
 	setShowWorktreePill: (value: boolean) => void;
 	setShowWorktreeBranchName: (value: boolean) => void;
 	setShowLeftPanelGroupMemberCount: (value: boolean) => void;
+	setLeftPanelCollapsedPillsPerRow: (value: number) => void;
 	setShowLeftPanelLocationPills: (value: boolean) => void;
 	setShowLeftPanelGitIndicator: (value: boolean) => void;
 	setShowLeftPanelCueIndicator: (value: boolean) => void;
@@ -751,6 +753,7 @@ export const useSettingsStore = create<SettingsStore>()((set, get) => {
 		showWorktreePill: false,
 		showWorktreeBranchName: false,
 		showLeftPanelGroupMemberCount: false,
+		leftPanelCollapsedPillsPerRow: 20,
 		showLeftPanelLocationPills: true,
 		showLeftPanelGitIndicator: true,
 		showLeftPanelCueIndicator: true,
@@ -1377,6 +1380,12 @@ export const useSettingsStore = create<SettingsStore>()((set, get) => {
 		setShowLeftPanelGroupMemberCount: (value) => {
 			set({ showLeftPanelGroupMemberCount: value });
 			window.maestro.settings.set('showLeftPanelGroupMemberCount', value);
+		},
+
+		setLeftPanelCollapsedPillsPerRow: (value) => {
+			const clamped = Math.max(5, Math.min(50, Math.round(value)));
+			set({ leftPanelCollapsedPillsPerRow: clamped });
+			window.maestro.settings.set('leftPanelCollapsedPillsPerRow', clamped);
 		},
 
 		setShowLeftPanelLocationPills: (value) => {
@@ -2633,6 +2642,13 @@ export async function loadAllSettings(): Promise<void> {
 		if (allSettings['showLeftPanelGroupMemberCount'] !== undefined)
 			patch.showLeftPanelGroupMemberCount = allSettings['showLeftPanelGroupMemberCount'] as boolean;
 
+		if (allSettings['leftPanelCollapsedPillsPerRow'] !== undefined) {
+			const perRow = allSettings['leftPanelCollapsedPillsPerRow'] as number;
+			if (typeof perRow === 'number' && perRow >= 5 && perRow <= 50) {
+				patch.leftPanelCollapsedPillsPerRow = perRow;
+			}
+		}
+
 		if (allSettings['showLeftPanelLocationPills'] !== undefined)
 			patch.showLeftPanelLocationPills = allSettings['showLeftPanelLocationPills'] as boolean;
 
@@ -2852,6 +2868,7 @@ export function getSettingsActions() {
 		setShowWorktreePill: state.setShowWorktreePill,
 		setShowWorktreeBranchName: state.setShowWorktreeBranchName,
 		setShowLeftPanelGroupMemberCount: state.setShowLeftPanelGroupMemberCount,
+		setLeftPanelCollapsedPillsPerRow: state.setLeftPanelCollapsedPillsPerRow,
 		setShowLeftPanelLocationPills: state.setShowLeftPanelLocationPills,
 		setShowLeftPanelGitIndicator: state.setShowLeftPanelGitIndicator,
 		setShowLeftPanelCueIndicator: state.setShowLeftPanelCueIndicator,

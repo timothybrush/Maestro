@@ -398,6 +398,8 @@ export interface UseSettingsReturn {
 	// Left side panel
 	showLeftPanelGroupMemberCount: boolean;
 	setShowLeftPanelGroupMemberCount: (value: boolean) => void;
+	leftPanelCollapsedPillsPerRow: number;
+	setLeftPanelCollapsedPillsPerRow: (value: number) => void;
 	showLeftPanelLocationPills: boolean;
 	setShowLeftPanelLocationPills: (value: boolean) => void;
 	showLeftPanelGitIndicator: boolean;

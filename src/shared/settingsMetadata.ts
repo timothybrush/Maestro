@@ -171,6 +171,13 @@ export const SETTINGS_METADATA: Record<string, SettingMetadata> = {
 		default: false,
 		category: 'appearance',
 	},
+	leftPanelCollapsedPillsPerRow: {
+		description:
+			'Maximum number of collapsed-group activity pills per row in the left side bar before wrapping to a new row. Range: 5-50.',
+		type: 'number',
+		default: 20,
+		category: 'appearance',
+	},
 	showLeftPanelLocationPills: {
 		description:
 			'Show the REMOTE / LOCAL / GIT location pills next to agents in the left side bar.',

@@ -278,6 +278,30 @@ describe('CollapsedSessionPillRows', () => {
 		expect((wrapper.children[2] as HTMLElement).children.length).toBe(20);
 	});
 
+	it('honors a custom maxPerRow, wrapping and padding to that cap', () => {
+		const sessions = Array.from({ length: 12 }, () => makeSession());
+		const props = createRowsProps(sessions, { maxPerRow: 5 });
+		const { container } = render(<CollapsedSessionPillRows {...props} />);
+
+		const wrapper = container.firstElementChild as HTMLElement;
+		// 12 sessions at 5/row → 3 rows (5 + 5 + 2)
+		expect(wrapper.children.length).toBe(3);
+		expect((wrapper.children[0] as HTMLElement).children.length).toBe(5);
+		expect((wrapper.children[1] as HTMLElement).children.length).toBe(5);
+		// Last row padded to 5 (2 pills + 3 spacers)
+		expect((wrapper.children[2] as HTMLElement).children.length).toBe(5);
+	});
+
+	it('falls back to the default cap of 20 when maxPerRow is omitted', () => {
+		const sessions = Array.from({ length: 21 }, () => makeSession());
+		const props = createRowsProps(sessions);
+		const { container } = render(<CollapsedSessionPillRows {...props} />);
+
+		const wrapper = container.firstElementChild as HTMLElement;
+		expect(wrapper.children.length).toBe(2);
+		expect((wrapper.children[0] as HTMLElement).children.length).toBe(20);
+	});
+
 	it('fires onContainerClick when the wrapper is clicked', () => {
 		const sessions = [makeSession(), makeSession()];
 		const onContainerClick = vi.fn();

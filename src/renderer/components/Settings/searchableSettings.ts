@@ -550,7 +550,7 @@ export const DISPLAY_SETTINGS: SearchableSetting[] = [
 		tabLabel: 'Display',
 		label: 'Left Side Panel',
 		description:
-			'Configure the left side bar: group member counts, location pills, git change indicator, Cue indicator, and worktree badges',
+			'Configure the left side bar: group member counts, collapsed pills per row, location pills, git change indicator, Cue indicator, and worktree badges',
 		keywords: [
 			'left',
 			'side',
@@ -570,6 +570,12 @@ export const DISPLAY_SETTINGS: SearchableSetting[] = [
 			'git',
 			'pill',
 			'pills',
+			'per row',
+			'row',
+			'rows',
+			'wrap',
+			'density',
+			'collapsed',
 			'badge',
 			'badges',
 			'location',

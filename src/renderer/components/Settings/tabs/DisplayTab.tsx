@@ -115,6 +115,8 @@ export function DisplayTab({ theme }: DisplayTabProps) {
 		setShowWorktreeBranchName,
 		showLeftPanelGroupMemberCount,
 		setShowLeftPanelGroupMemberCount,
+		leftPanelCollapsedPillsPerRow,
+		setLeftPanelCollapsedPillsPerRow,
 		showLeftPanelLocationPills,
 		setShowLeftPanelLocationPills,
 		showLeftPanelGitIndicator,
@@ -561,6 +563,39 @@ export function DisplayTab({ theme }: DisplayTabProps) {
 								}`}
 							/>
 						</button>
+					</div>
+
+					{/* Collapsed pills per row */}
+					<div className="pt-3 border-t" style={{ borderColor: theme.colors.border }}>
+						<p className="text-sm" style={{ color: theme.colors.textMain }}>
+							Collapsed group pills per row
+						</p>
+						<p className="text-xs opacity-50 mt-0.5 mb-2">
+							When a group is collapsed, its agents render as a row of activity pills. Pills wrap to
+							a new row once this many are shown, so large groups stay readable instead of
+							condensing into invisible slivers.
+						</p>
+						<div className="flex items-center gap-3">
+							<input
+								type="range"
+								min={5}
+								max={50}
+								step={5}
+								value={leftPanelCollapsedPillsPerRow}
+								onChange={(e) => setLeftPanelCollapsedPillsPerRow(Number(e.target.value))}
+								className="flex-1 h-2 rounded-lg appearance-none cursor-pointer"
+								style={{
+									background: `linear-gradient(to right, ${theme.colors.accent} 0%, ${theme.colors.accent} ${((leftPanelCollapsedPillsPerRow - 5) / 45) * 100}%, ${theme.colors.bgActivity} ${((leftPanelCollapsedPillsPerRow - 5) / 45) * 100}%, ${theme.colors.bgActivity} 100%)`,
+								}}
+								aria-label="Collapsed group pills per row"
+							/>
+							<span
+								className="text-sm font-mono w-8 text-right"
+								style={{ color: theme.colors.textMain }}
+							>
+								{leftPanelCollapsedPillsPerRow}
+							</span>
+						</div>
 					</div>
 
 					{/* Show location pills */}
