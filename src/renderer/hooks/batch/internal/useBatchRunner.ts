@@ -8,6 +8,7 @@ import type {
 	UsageStats,
 	Group,
 	AutoRunStats,
+	AgentError,
 } from '../../../types';
 import type { AgentSpawnErrorKind } from '../../agent/useAgentExecution';
 import { gitService } from '../../../services/git';
@@ -16,7 +17,7 @@ import { notifyToast } from '../../../stores/notificationStore';
 import { useBatchStore } from '../../../stores/batchStore';
 import { useSessionStore, selectSessionById } from '../../../stores/sessionStore';
 import { useSettingsStore } from '../../../stores/settingsStore';
-import { countUnfinishedTasks, uncheckAllTasks } from '../batchUtils';
+import { countUnfinishedTasks, findPendingHitlGate, uncheckAllTasks } from '../batchUtils';
 import { DEFAULT_BATCH_STATE, type BatchAction } from '../batchReducer';
 import { createLoopSummaryEntry } from './batchLoopSummary';
 import { buildFinalSummary } from './batchFinalSummary';
@@ -64,6 +65,12 @@ export interface UseBatchRunnerDeps {
 	broadcastAutoRunState: (sessionId: string, state: BatchRunState | null) => void;
 	flushDebouncedUpdate: (sessionId: string) => void;
 	dispatch: (action: BatchAction) => void;
+	pauseBatchOnError: (
+		sessionId: string,
+		error: AgentError,
+		documentIndex: number,
+		taskDescription?: string
+	) => void;
 	timeTracking: UseTimeTrackingReturn;
 	worktreeManager: UseWorktreeManagerReturn;
 	documentProcessor: UseDocumentProcessorReturn;
@@ -105,6 +112,7 @@ export function useBatchRunner({
 	broadcastAutoRunState,
 	flushDebouncedUpdate,
 	dispatch,
+	pauseBatchOnError,
 	timeTracking,
 	worktreeManager,
 	documentProcessor,
@@ -454,6 +462,16 @@ export function useBatchRunner({
 			// Track stalled documents (document filename -> stall reason)
 			const stalledDocuments: Map<string, string> = new Map();
 
+			// Track the line of the currently-active HITL gate (null when none).
+			// Used to (a) dedupe the sticky toast on Resume-without-tick —
+			// pauseBatchOnError fires every iteration that re-detects the same
+			// marker, but the user should only see one notification per real
+			// gate; and (b) flag that a returning 'resume' action came from a
+			// HITL pause so the doc re-read is HITL-scoped and doesn't alter
+			// the pre-existing agent_crashed/permission_denied/etc. resume
+			// paths.
+			let activeHitlGateLine: number | null = null;
+
 			// Track working copies for reset-on-completion documents (original filename -> working copy path)
 			// Working copies are stored in /Runs/ and serve as audit logs
 			const workingCopies: Map<string, string> = new Map();
@@ -624,7 +642,102 @@ export function useBatchRunner({
 								skipCurrentDocumentAfterError = true;
 								break;
 							}
+
+							// HITL-scoped resume: when the pause we're resuming from was a
+							// HITL gate, re-read the document so the next iteration's gate
+							// check (and processTask) see whatever the user did during
+							// the pause — most importantly, ticking the human-approval
+							// checkbox. Without this the in-memory `docContent` still
+							// contains the unchecked task and we'd re-pause forever.
+							//
+							// Other resume types (agent_crashed, permission_denied, …)
+							// keep their pre-PR behavior of continuing with in-memory
+							// content, and an I/O failure here (file deleted, SSH
+							// dropped) is logged but doesn't crash the run.
+							if (activeHitlGateLine !== null) {
+								try {
+									const {
+										taskCount: resumedRemaining,
+										checkedCount: resumedChecked,
+										content: resumedContent,
+									} = await readDocAndCountTasks(folderPath, effectiveFilename, sshRemoteId);
+									remainingTasks = resumedRemaining;
+									docCheckedCount = resumedChecked;
+									docContent = resumedContent;
+								} catch (rereadErr) {
+									logger.warn(
+										`[BatchProcessor] HITL resume re-read failed for ${effectiveFilename}; continuing with in-memory content:`,
+										undefined,
+										rereadErr
+									);
+								}
+								if (remainingTasks === 0) break;
+							}
 						}
+
+						// HITL gate detection: if the document has a HITL marker positioned
+						// before the next unchecked task with no intervening checked task,
+						// pause the run via the existing error-resolution infrastructure.
+						// Re-uses `pauseBatchOnError` so the AutoRunErrorBanner ("Resume" /
+						// "Abort Run") just works without new UI plumbing.
+						const hitlGate = findPendingHitlGate(docContent);
+						if (hitlGate) {
+							const hitlError: AgentError = {
+								type: 'hitl_gate',
+								message: hitlGate.artifact
+									? `${hitlGate.reason} (artifact: ${hitlGate.artifact})`
+									: hitlGate.reason,
+								recoverable: true,
+								agentId: session.toolType,
+								sessionId,
+								timestamp: Date.now(),
+							};
+							pauseBatchOnError(sessionId, hitlError, docIndex);
+
+							// Dedupe: only fire the user-facing toast the first time we
+							// pause at a given gate. Resume-without-tick re-runs this
+							// detection on the next iteration, but the user already has
+							// the same banner up — stacking another sticky toast each
+							// time would force them to clear N notifications.
+							const isNewGate = activeHitlGateLine !== hitlGate.line;
+							activeHitlGateLine = hitlGate.line;
+
+							if (isNewGate) {
+								window.maestro.logger.autorun(
+									`HITL gate reached: ${hitlGate.reason}`,
+									session.name,
+									{
+										document: docEntry.filename,
+										reason: hitlGate.reason,
+										artifact: hitlGate.artifact,
+										markerLine: hitlGate.line,
+									}
+								);
+
+								// Sticky toast — the user must acknowledge a review gate,
+								// so it should not auto-dismiss. Click jumps to the agent
+								// so the user can see the AutoRunErrorBanner with the
+								// Resume/Abort buttons.
+								notifyToast({
+									type: 'info',
+									title: 'Auto Run paused for review',
+									message: hitlGate.artifact
+										? `${docEntry.filename}: ${hitlGate.reason} — review ${hitlGate.artifact}`
+										: `${docEntry.filename}: ${hitlGate.reason}`,
+									project: session.name,
+									sessionId,
+									dismissible: true,
+								});
+							}
+
+							// Next loop iteration's await-on-errorResolution block handles
+							// the actual wait — keeps the pause control flow in one place.
+							continue;
+						}
+
+						// No pending gate — clear the active-gate marker so a future
+						// gate on a different line is treated as a fresh notification.
+						activeHitlGateLine = null;
 
 						// Use extracted document processor hook for task processing
 						// This handles: template substitution, document expansion, agent spawning,
@@ -1382,6 +1495,7 @@ export function useBatchRunner({
 			onProcessQueueAfterCompletion,
 			onSpawnAgent,
 			onUpdateSession,
+			pauseBatchOnError,
 			readDocAndCountTasks,
 			sessionsRef,
 			stopRequestedRefs,
