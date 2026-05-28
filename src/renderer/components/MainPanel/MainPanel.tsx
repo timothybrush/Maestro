@@ -380,6 +380,16 @@ export const MainPanel = React.memo(
 					if (!session?.activeBrowserTabId) return;
 					browserViewRef.current?.openFind();
 				},
+				browserBack: () => {
+					const session = selectActiveSession(useSessionStore.getState());
+					if (!session?.activeBrowserTabId) return;
+					browserViewRef.current?.goBack();
+				},
+				browserForward: () => {
+					const session = selectActiveSession(useSessionStore.getState());
+					if (!session?.activeBrowserTabId) return;
+					browserViewRef.current?.goForward();
+				},
 				focusActiveTab: () => {
 					// Read fresh from the store: useImperativeHandle only rebuilds when
 					// deps change, so the captured `activeSession` prop is stale if the

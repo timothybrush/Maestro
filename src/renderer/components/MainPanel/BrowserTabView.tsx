@@ -63,6 +63,12 @@ export interface BrowserTabViewHandle {
 	getTabId(): string;
 	/** Open the in-page find bar and focus its input. */
 	openFind(): void;
+	/** Navigate back in the webview history if possible. No-op otherwise. */
+	goBack(): void;
+	/** Navigate forward in the webview history if possible. No-op otherwise. */
+	goForward(): void;
+	/** Move focus into the webview guest content (so arrow keys scroll the page). */
+	focusWebview(): void;
 }
 
 function syncWebviewLayout(webview: ElectronWebviewElement | null) {
@@ -141,6 +147,20 @@ export const BrowserTabView = React.memo(
 					// `findOpen` so it runs after React commits the input to the DOM
 					// (requestAnimationFrame fired before commit in practice).
 					setFindOpen(true);
+				},
+				goBack(): void {
+					const webview = webviewRef.current;
+					if (webview?.canGoBack()) webview.goBack();
+				},
+				goForward(): void {
+					const webview = webviewRef.current;
+					if (webview?.canGoForward()) webview.goForward();
+				},
+				focusWebview(): void {
+					// Mark the focus as user-initiated so the host's focus-stealing
+					// guard does not immediately blur the webview back out.
+					userClickedRef.current = true;
+					webviewRef.current?.focus();
 				},
 			}),
 			[]
@@ -649,6 +669,19 @@ export const BrowserTabView = React.memo(
 										}}
 										onFocus={handleAddressFocus}
 										onBlur={handleAddressBlur}
+										onKeyDown={(event) => {
+											if (event.key === 'Escape') {
+												// Revert any edits, then hand focus to the webview so
+												// the user can immediately use arrow keys to scroll.
+												event.preventDefault();
+												event.stopPropagation();
+												setAddressValue(latestTabRef.current.url);
+												setAddressError(null);
+												event.currentTarget.blur();
+												userClickedRef.current = true;
+												webviewRef.current?.focus();
+											}
+										}}
 										className="w-full bg-transparent outline-none text-sm"
 										style={{ color: theme.colors.textMain }}
 										placeholder="Enter a URL or search term"

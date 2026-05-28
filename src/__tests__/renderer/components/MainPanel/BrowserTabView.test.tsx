@@ -29,6 +29,8 @@ class MockResizeObserver {
 type MockWebview = HTMLElement & {
 	canGoBack: ReturnType<typeof vi.fn>;
 	canGoForward: ReturnType<typeof vi.fn>;
+	goBack?: ReturnType<typeof vi.fn>;
+	goForward?: ReturnType<typeof vi.fn>;
 	getURL: ReturnType<typeof vi.fn>;
 	getTitle: ReturnType<typeof vi.fn>;
 	isLoading: ReturnType<typeof vi.fn>;
@@ -581,6 +583,61 @@ describe('BrowserTabView', () => {
 			});
 			expect(screen.queryByTestId('browser-tab-find-bar')).toBeNull();
 			expect(stopFindInPage).toHaveBeenCalledWith('clearSelection');
+		});
+
+		it('goBack and goForward delegate to webview, respecting canGoBack/canGoForward', async () => {
+			const ref = React.createRef<BrowserTabViewHandle>();
+			render(<BrowserTabView ref={ref} tab={mockTab} theme={mockTheme} onUpdateTab={vi.fn()} />);
+
+			const webview = getWebview();
+			const goBack = vi.fn();
+			const goForward = vi.fn();
+			webview.goBack = goBack;
+			webview.goForward = goForward;
+			webview.canGoBack = vi.fn(() => false);
+			webview.canGoForward = vi.fn(() => false);
+
+			// No-op when history is empty
+			act(() => ref.current!.goBack());
+			act(() => ref.current!.goForward());
+			expect(goBack).not.toHaveBeenCalled();
+			expect(goForward).not.toHaveBeenCalled();
+
+			webview.canGoBack = vi.fn(() => true);
+			webview.canGoForward = vi.fn(() => true);
+
+			act(() => ref.current!.goBack());
+			act(() => ref.current!.goForward());
+			expect(goBack).toHaveBeenCalledTimes(1);
+			expect(goForward).toHaveBeenCalledTimes(1);
+		});
+
+		it('Escape in the address bar restores URL and focuses the webview', async () => {
+			render(<BrowserTabView tab={mockTab} theme={mockTheme} onUpdateTab={vi.fn()} />);
+
+			const input = document.getElementById(
+				`browser-tab-address-${mockTab.id}`
+			) as HTMLInputElement;
+			expect(input).toBeTruthy();
+
+			const webview = getWebview();
+			const webviewFocus = vi.spyOn(webview, 'focus');
+
+			// Edit the URL, then press Escape
+			await act(async () => {
+				fireEvent.focus(input);
+				fireEvent.change(input, { target: { value: 'edited.com' } });
+			});
+			expect(input.value).toBe('edited.com');
+
+			await act(async () => {
+				fireEvent.keyDown(input, { key: 'Escape' });
+			});
+
+			// Reverted to the tab's actual URL, input lost focus, webview gained focus
+			expect(input.value).toBe(mockTab.url);
+			expect(document.activeElement).not.toBe(input);
+			expect(webviewFocus).toHaveBeenCalled();
 		});
 
 		it('ignores stale found-in-page results from a prior query', async () => {

@@ -278,6 +278,15 @@ export function useMainKeyboardHandler(): UseMainKeyboardHandlerReturn {
 					!e.shiftKey &&
 					e.key.toLowerCase() === 'f' &&
 					!!ctx.activeSession?.activeBrowserTabId;
+				// Allow Cmd+Left / Cmd+Right (browser history back/forward) to fall
+				// through when a browser tab is active. The address/find bar inputs
+				// still preserve macOS line navigation via the target check below.
+				const isBrowserNavShortcut =
+					(e.metaKey || e.ctrlKey) &&
+					!e.altKey &&
+					!e.shiftKey &&
+					(e.key === 'ArrowLeft' || e.key === 'ArrowRight') &&
+					!!ctx.activeSession?.activeBrowserTabId;
 				// Allow font size shortcuts (Cmd+=/+, Cmd+-, Cmd+0) even when modals/overlays are open
 				const isFontSizeShortcut =
 					(e.metaKey || e.ctrlKey) &&
@@ -322,6 +331,7 @@ export function useMainKeyboardHandler(): UseMainKeyboardHandlerReturn {
 						!isToggleModeShortcut &&
 						!isBrowserAddressShortcut &&
 						!isBrowserFindShortcut &&
+						!isBrowserNavShortcut &&
 						!isFontSizeShortcut
 					) {
 						return;
@@ -785,6 +795,30 @@ export function useMainKeyboardHandler(): UseMainKeyboardHandlerReturn {
 					ctx.mainPanelRef?.current?.focusBrowserAddressBar();
 					trackShortcut('focusBrowserAddress');
 				}
+				// Cmd+Left / Cmd+Right: Browser history back/forward when a browser
+				// tab is active. We deliberately skip when focus is inside an
+				// editable element (URL bar, find bar, any other text input) so
+				// macOS line-navigation (Cmd+Left = beginning-of-line) keeps
+				// working there. File preview's own keydown handler runs first
+				// with stopPropagation when the preview is the active surface, so
+				// this never collides with filePreviewBack/Forward.
+				if (
+					(e.metaKey || e.ctrlKey) &&
+					!e.altKey &&
+					!e.shiftKey &&
+					(e.key === 'ArrowLeft' || e.key === 'ArrowRight') &&
+					ctx.activeSession?.activeBrowserTabId &&
+					!isEditableTarget
+				) {
+					e.preventDefault();
+					if (e.key === 'ArrowLeft') {
+						ctx.mainPanelRef?.current?.browserBack();
+					} else {
+						ctx.mainPanelRef?.current?.browserForward();
+					}
+					trackShortcut(e.key === 'ArrowLeft' ? 'navBack' : 'navForward');
+					return;
+				}
 				// Cmd+R: Reload active browser tab (when a browser tab is active)
 				if (
 					ctx.isTabShortcut(e, 'toggleReadOnlyMode') &&
@@ -1158,6 +1192,22 @@ export function useMainKeyboardHandler(): UseMainKeyboardHandlerReturn {
 					(input.key === 'f' || input.key === 'F')
 				) {
 					ctx.mainPanelRef?.current?.openBrowserFind();
+					return;
+				}
+				// Cmd+Left / Cmd+Right forwarded from the webview guest → browser
+				// history back/forward. Routed directly so the overlay-guard /
+				// re-dispatch path never sees it.
+				if (
+					(input.meta || input.control) &&
+					!input.alt &&
+					!input.shift &&
+					(input.key === 'ArrowLeft' || input.key === 'ArrowRight')
+				) {
+					if (input.key === 'ArrowLeft') {
+						ctx.mainPanelRef?.current?.browserBack();
+					} else {
+						ctx.mainPanelRef?.current?.browserForward();
+					}
 					return;
 				}
 			}

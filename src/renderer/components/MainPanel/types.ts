@@ -35,6 +35,10 @@ export interface MainPanelHandle {
 	focusBrowserAddressBar: () => void;
 	/** Open the in-page find bar in the active browser tab */
 	openBrowserFind: () => void;
+	/** Navigate back in the active browser tab's history */
+	browserBack: () => void;
+	/** Navigate forward in the active browser tab's history */
+	browserForward: () => void;
 	/** Scroll the active tab header into view and focus it */
 	focusActiveTab: () => void;
 	/** Reload the active browser tab (or stop loading if in progress) */
