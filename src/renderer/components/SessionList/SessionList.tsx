@@ -1720,6 +1720,14 @@ function SessionListInner(props: SessionListProps) {
 						modalActions.setRenameGroupEmoji(groupContextMenuGroup.emoji);
 						modalActions.setRenameGroupModalOpen(true);
 					}}
+					onChangeEmoji={() => {
+						// Reuses the rename modal, which includes the emoji picker.
+						const modalActions = getModalActions();
+						modalActions.setRenameGroupId(groupContextMenuGroup.id);
+						modalActions.setRenameGroupValue(groupContextMenuGroup.name);
+						modalActions.setRenameGroupEmoji(groupContextMenuGroup.emoji);
+						modalActions.setRenameGroupModalOpen(true);
+					}}
 					onNewAgent={() => {
 						// Expand the group so the new agent is visible when it lands here.
 						if (groupContextMenuGroup.collapsed) {
@@ -1732,7 +1740,6 @@ function SessionListInner(props: SessionListProps) {
 					}}
 					onDelete={
 						// Worktree groups always cascade-delete (handler removes agents).
-						// Non-worktree groups can only be deleted when empty.
 						groupContextMenuGroup.emoji === '🌳' && onDeleteWorktreeGroup
 							? () => onDeleteWorktreeGroup(groupContextMenuGroup.id)
 							: groupContextMenuMemberCount === 0
@@ -1743,7 +1750,21 @@ function SessionListInner(props: SessionListProps) {
 												setGroups((prev) => prev.filter((g) => g.id !== groupContextMenuGroup.id));
 											}
 										)
-								: undefined
+								: () =>
+										showConfirmation(
+											`Delete the group "${groupContextMenuGroup.name}"? Its ${groupContextMenuMemberCount} agent${groupContextMenuMemberCount === 1 ? '' : 's'} will be moved out of the group, not deleted.`,
+											() => {
+												const gid = groupContextMenuGroup.id;
+												// Ungroup members (and their synced worktree children) first.
+												setSessions((prev) =>
+													prev.map((s) => (s.groupId === gid ? { ...s, groupId: undefined } : s))
+												);
+												setGroups((prev) => prev.filter((g) => g.id !== gid));
+											}
+										)
+					}
+					deleteLabel={
+						groupContextMenuGroup.emoji === '🌳' ? 'Remove Group and Agents' : 'Delete Group'
 					}
 					onDismiss={() => setGroupContextMenu(null)}
 				/>
