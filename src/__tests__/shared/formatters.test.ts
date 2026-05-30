@@ -569,8 +569,11 @@ describe('shared/formatters', () => {
 			expect(abbreviateGroupName('[GU] Generic User')).toBe('GU');
 			// Bracket prefix is honored even when the name is already short.
 			expect(abbreviateGroupName('[ARP]')).toBe('ARP');
-			// Tag itself is over max → fall through to other strategies.
-			expect(abbreviateGroupName('[VeryLongTagName] X', { max: 5 })).toBe('[X');
+			// Tag itself is over max → fall through to initials, which skip the
+			// leading bracket entirely (no lopped "[" in the output).
+			expect(abbreviateGroupName('[VeryLongTagName] X', { max: 5 })).toBe('VX');
+			// Pure-numbering prefix is not a tag → dropped, initials of the rest win.
+			expect(abbreviateGroupName('[1] Aleyemma/Money-Sessions')).toBe('AMS');
 		});
 	});
 
