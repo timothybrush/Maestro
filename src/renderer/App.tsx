@@ -134,6 +134,7 @@ import {
 	// Session switching callbacks (navigate to session/tab from various UI surfaces)
 	useSessionSwitchCallbacks,
 } from './hooks';
+import { useChatFileDropZone } from './hooks/ui/useChatFileDropZone';
 import { useMainPanelProps, useSessionListProps, useRightPanelProps } from './hooks/props';
 import { useAgentListeners } from './hooks/agent/useAgentListeners';
 import { useSessionRecovery } from './hooks/agent/useSessionRecovery';
@@ -1034,11 +1035,13 @@ function MaestroConsoleInner() {
 	} = useWorktreeHandlers();
 
 	// --- APP HANDLERS (drag, file, folder operations) ---
+	// NOTE: file-drop attach is now scoped per-region (useChatFileDropZone for the
+	// main panel / group chat; the Files panel for tree imports). useAppHandlers
+	// still owns the document-level dragover/drop preventDefault that keeps the
+	// inert regions (left bar, History/Auto Run) from navigating to a file:// URL,
+	// plus session-drag lifecycle. setIsDraggingFile/dragCounterRef are still
+	// threaded into useInputHandlers' handleDrop for defensive reset.
 	const {
-		handleFileDragEnter,
-		handleFileDragLeave,
-		handleFileDragOver,
-		isDraggingFile,
 		setIsDraggingFile,
 		dragCounterRef,
 		handleFileClick,
@@ -2661,6 +2664,10 @@ function MaestroConsoleInner() {
 		handleOpenBrowserTabAt,
 	});
 
+	// Chat-attach drop zone for the group chat view (parity with the main panel).
+	// Scoped to the group chat container so only that region reacts.
+	const groupChatDropZone = useChatFileDropZone(theme, handleDrop);
+
 	return (
 		<>
 			<div
@@ -2673,54 +2680,11 @@ function MaestroConsoleInner() {
 					fontFamily: fontFamily,
 					fontSize: `${fontSize}px`,
 				}}
-				onDragEnter={handleFileDragEnter}
-				onDragLeave={handleFileDragLeave}
-				onDragOver={handleFileDragOver}
-				onDrop={handleDrop}
 			>
-				{/* External File Drop Overlay */}
-				{isDraggingFile && (
-					<div
-						className="fixed inset-0 z-[9999] flex items-center justify-center cursor-pointer"
-						style={{ backgroundColor: `${theme.colors.accent}20` }}
-						onClick={() => {
-							// Escape hatch: if the overlay ever gets stuck (drag canceled in
-							// a way that didn't fire dragend or dragleave), clicking it
-							// resets the drag state.
-							dragCounterRef.current = 0;
-							setIsDraggingFile(false);
-						}}
-					>
-						<div
-							className="pointer-events-none rounded-xl border-2 border-dashed p-8 flex flex-col items-center gap-3"
-							style={{
-								borderColor: theme.colors.accent,
-								backgroundColor: `${theme.colors.bgMain}ee`,
-							}}
-						>
-							<svg
-								className="w-16 h-16"
-								style={{ color: theme.colors.accent }}
-								fill="none"
-								stroke="currentColor"
-								viewBox="0 0 24 24"
-							>
-								<path
-									strokeLinecap="round"
-									strokeLinejoin="round"
-									strokeWidth={2}
-									d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
-								/>
-							</svg>
-							<span className="text-lg font-medium" style={{ color: theme.colors.textMain }}>
-								Drop file or folder
-							</span>
-							<span className="text-sm" style={{ color: theme.colors.textDim }}>
-								Images attach as thumbnails. Anything else becomes an @reference.
-							</span>
-						</div>
-					</div>
-				)}
+				{/* External file drops are handled per-region, not globally: the main
+				    panel and group chat attach to the chat (see useChatFileDropZone),
+				    while the Files panel imports into the tree. The left bar and the
+				    History/Auto Run panel intentionally do nothing. */}
 
 				{/* --- DRAGGABLE TITLE BAR (hidden in mobile landscape or when using native title bar) --- */}
 				{!isMobileLandscape && !useNativeTitleBar && (
@@ -3197,7 +3161,11 @@ function MaestroConsoleInner() {
 					activeGroupChatId &&
 					groupChats.find((c) => c.id === activeGroupChatId) && (
 						<>
-							<div className="flex-1 flex flex-col min-w-0">
+							<div
+								className="flex-1 flex flex-col min-w-0 relative"
+								{...groupChatDropZone.dragHandlers}
+							>
+								{groupChatDropZone.overlay}
 								<GroupChatPanel
 									theme={theme}
 									groupChat={groupChats.find((c) => c.id === activeGroupChatId)!}

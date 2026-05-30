@@ -943,6 +943,12 @@ interface MaestroAPI {
 			dirPath: string,
 			sshRemoteId?: string
 		) => Promise<{ fileCount: number; folderCount: number }>;
+		copyPath: (
+			sourcePath: string,
+			destPath: string,
+			options?: { overwrite?: boolean }
+		) => Promise<{ success: boolean }>;
+		getPathForFile: (file: File) => string;
 	};
 	webserver: {
 		getUrl: () => Promise<string>;
