@@ -214,4 +214,95 @@ describe('stripThinkingFromTranscript', () => {
 		expect(res.sanitized).toBe(false);
 		expect(res.droppedRows).toBe(0);
 	});
+
+	it('preserves valid API-account thinking blocks (non-empty reasoning text)', () => {
+		// Pure-API transcripts: the sanitizer must NOT strip thinking blocks
+		// that carry non-empty reasoning. Anthropic's API rejects re-resumes
+		// where the latest assistant message's thinking blocks were modified,
+		// so stripping them would itself trip the 400 we're trying to prevent.
+		write([
+			{ type: 'user', uuid: 'u1', parentUuid: null, message: { role: 'user', content: 'hi' } },
+			{
+				type: 'assistant',
+				uuid: 'a1',
+				parentUuid: 'u1',
+				message: {
+					role: 'assistant',
+					content: [
+						{ type: 'thinking', thinking: 'Let me consider this.', signature: 'api-sig' },
+						{ type: 'text', text: 'sure' },
+					],
+				},
+			},
+		]);
+		const before = fs.readFileSync(transcriptPath, 'utf8');
+
+		const res = stripThinkingFromTranscript(transcriptPath);
+
+		expect(res.sanitized).toBe(false);
+		expect(res.strippedBlocks).toBe(0);
+		expect(res.droppedRows).toBe(0);
+		expect(res.backupPath).toBeNull();
+		expect(fs.readFileSync(transcriptPath, 'utf8')).toBe(before);
+	});
+
+	it('strips empty shells while preserving non-empty thinking siblings in the same message', () => {
+		// Hybrid shape: a single assistant message carrying both a maestro-p
+		// shell and a valid API-account thinking block. Only the shell is
+		// removed; the signed reasoning block survives untouched.
+		write([
+			{
+				type: 'assistant',
+				uuid: 'a1',
+				parentUuid: null,
+				message: {
+					role: 'assistant',
+					content: [
+						{ type: 'thinking', thinking: '', signature: 'maestro-p-sig' },
+						{ type: 'thinking', thinking: 'real reasoning', signature: 'api-sig' },
+						{ type: 'text', text: 'answer' },
+					],
+				},
+			},
+		]);
+
+		const res = stripThinkingFromTranscript(transcriptPath);
+
+		expect(res.sanitized).toBe(true);
+		expect(res.droppedRows).toBe(0);
+		expect(res.strippedBlocks).toBe(1);
+
+		const content = (
+			readRows()[0].message as { content: Array<{ type: string; thinking?: string }> }
+		).content;
+		expect(content.map((b) => b.type)).toEqual(['thinking', 'text']);
+		expect(content[0].thinking).toBe('real reasoning');
+	});
+
+	it('treats `redacted_thinking` without a thinking field as an empty shell', () => {
+		// `redacted_thinking` blocks may legitimately omit `thinking`; they
+		// only carry an account-bound signature, so they're stripped just like
+		// the empty-string shells maestro-p writes.
+		write([
+			{
+				type: 'assistant',
+				uuid: 'a1',
+				parentUuid: null,
+				message: {
+					role: 'assistant',
+					content: [
+						{ type: 'redacted_thinking', signature: 'sig' },
+						{ type: 'text', text: 'visible' },
+					],
+				},
+			},
+		]);
+
+		const res = stripThinkingFromTranscript(transcriptPath);
+
+		expect(res.sanitized).toBe(true);
+		expect(res.strippedBlocks).toBe(1);
+		const content = (readRows()[0].message as { content: Array<{ type: string }> }).content;
+		expect(content.map((b) => b.type)).toEqual(['text']);
+	});
 });

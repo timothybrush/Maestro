@@ -661,7 +661,6 @@ export const AppUtilityModals = memo(function AppUtilityModals({
 					lastModifiedAt={activeSession.batchRunnerPromptModifiedAt}
 					showConfirmation={showConfirmation}
 					folderPath={activeSession.autoRunFolderPath}
-					currentDocument={activeSession.autoRunSelectedFile || ''}
 					presetDocuments={batchRunnerPresetDocuments}
 					allDocuments={autoRunDocumentList}
 					documentTree={autoRunDocumentTree}

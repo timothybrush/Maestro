@@ -1,9 +1,8 @@
 /**
  * Claude Transcript Sanitizer
  *
- * Strips `thinking` / `redacted_thinking` blocks out of a Claude Code JSONL
- * transcript so it can be safely resumed under a *different token source* - the
- * Adaptive-mode (maestro-p) interactive->API fallback.
+ * Strips subscription-account thinking shells out of a Claude Code JSONL
+ * transcript so it can be safely resumed under the API token source.
  *
  * Why this exists
  * ---------------
@@ -18,20 +17,23 @@
  *   latest assistant message cannot be modified. These blocks must remain as
  *   they were in the original response.
  *
- * because the empty content no longer matches the signature. The blocks also
- * can't cross the subscription->API account boundary at all (signatures are
- * account-scoped), so the only safe action is to drop them. Once a poisoned
- * block is in history, every subsequent `--resume` re-hits the same 400, which
- * is what makes a conversation get permanently "stuck".
+ * because the signature is account-scoped (subscription, not API). Once a
+ * poisoned block is in history, every subsequent `--resume` re-hits the same
+ * 400, which is what makes a conversation get permanently "stuck".
  *
- * Thinking blocks are ephemeral reasoning, not user-visible content. Removing
- * them leaves all text and tool-use blocks intact and keeps the conversation
- * fully resumable in either mode.
+ * Scope: empty-thinking shells only
+ * ---------------------------------
+ * Only blocks with **empty** `thinking` text are stripped. Valid API-account
+ * thinking blocks always carry non-empty reasoning text alongside their
+ * signature, and Anthropic's API requires them to be re-sent verbatim when
+ * extended thinking is enabled on the next turn - removing them would itself
+ * trip the same 400. The signature-only shell pattern is unique to maestro-p,
+ * so the narrow predicate is the only safe target.
  *
  * Transform
  * ---------
- *   - For every assistant message, remove `thinking` / `redacted_thinking`
- *     content blocks.
+ *   - For every assistant message, remove empty-thinking shells (any
+ *     `thinking` / `redacted_thinking` block with `thinking === ''`).
  *   - If a message's content becomes empty, drop the whole row and re-link any
  *     descendants (`parentUuid`) to the dropped row's parent so the linked-list
  *     threading Claude Code relies on stays intact (transitively, in case of
@@ -42,8 +44,8 @@
  * The file is rewritten atomically (temp file + rename). A one-time `.bak`
  * sibling is written before the first mutation so the original is recoverable.
  *
- * Idempotent: a transcript with no thinking blocks is left byte-for-byte
- * unchanged and reports `sanitized: false`.
+ * Idempotent: a transcript with no empty thinking shells is left byte-for-byte
+ * unchanged and reports `sanitized: false`. Safe to run on pure-API transcripts.
  */
 
 import * as fs from 'fs';
@@ -66,12 +68,23 @@ interface ParsedRow {
 	obj: Record<string, unknown> | null;
 }
 
-function isThinkingBlock(block: unknown): boolean {
-	return (
-		!!block &&
-		typeof block === 'object' &&
-		THINKING_BLOCK_TYPES.has((block as { type?: unknown }).type as string)
-	);
+/**
+ * Empty-thinking shell: a `thinking` / `redacted_thinking` block whose `thinking`
+ * text is the empty string. This is what maestro-p persists for subscription-
+ * account turns and the only shape we strip. API-account thinking blocks always
+ * have non-empty reasoning text and are preserved verbatim.
+ *
+ * `redacted_thinking` blocks may legitimately lack a `thinking` field; treat a
+ * missing field as empty for the same reason - they carry only an account-bound
+ * signature with no resumable reasoning content.
+ */
+function isStrippableThinkingShell(block: unknown): boolean {
+	if (!block || typeof block !== 'object') return false;
+	const b = block as { type?: unknown; thinking?: unknown };
+	if (!THINKING_BLOCK_TYPES.has(b.type as string)) return false;
+	const thinking = b.thinking;
+	if (thinking === undefined) return true;
+	return typeof thinking === 'string' && thinking.length === 0;
 }
 
 function getMessage(obj: Record<string, unknown>): Record<string, unknown> | null {
@@ -125,10 +138,10 @@ export function stripThinkingFromTranscript(transcriptPath: string): SanitizeRes
 		const content = msg?.content;
 		if (!Array.isArray(content)) continue;
 
-		const thinkingCount = content.filter(isThinkingBlock).length;
+		const thinkingCount = content.filter(isStrippableThinkingShell).length;
 		if (thinkingCount === 0) continue;
 
-		const remaining = content.filter((b) => !isThinkingBlock(b));
+		const remaining = content.filter((b) => !isStrippableThinkingShell(b));
 		if (remaining.length === 0) {
 			const uuid = typeof row.obj.uuid === 'string' ? row.obj.uuid : null;
 			const parentUuid =
@@ -181,8 +194,8 @@ export function stripThinkingFromTranscript(transcriptPath: string): SanitizeRes
 		// Strip thinking blocks from a surviving (mixed-content) message.
 		const msg = getMessage(obj);
 		const content = msg?.content;
-		if (Array.isArray(content) && content.some(isThinkingBlock)) {
-			msg!.content = content.filter((b) => !isThinkingBlock(b));
+		if (Array.isArray(content) && content.some(isStrippableThinkingShell)) {
+			msg!.content = content.filter((b) => !isStrippableThinkingShell(b));
 			mutated = true;
 		}
 

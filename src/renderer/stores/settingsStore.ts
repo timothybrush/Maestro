@@ -408,6 +408,7 @@ export interface SettingsStoreState {
 	showSessionCostPill: boolean;
 	showWorktreePill: boolean;
 	showWorktreeBranchName: boolean;
+	showStarredSessionsSection: boolean;
 	showLeftPanelGroupMemberCount: boolean;
 	leftPanelCollapsedPillsPerRow: number;
 	showLeftPanelLocationPills: boolean;
@@ -541,6 +542,7 @@ export interface SettingsStoreActions {
 	setShowSessionCostPill: (value: boolean) => void;
 	setShowWorktreePill: (value: boolean) => void;
 	setShowWorktreeBranchName: (value: boolean) => void;
+	setShowStarredSessionsSection: (value: boolean) => void;
 	setShowLeftPanelGroupMemberCount: (value: boolean) => void;
 	setLeftPanelCollapsedPillsPerRow: (value: number) => void;
 	setShowLeftPanelLocationPills: (value: boolean) => void;
@@ -753,6 +755,7 @@ export const useSettingsStore = create<SettingsStore>()((set, get) => {
 		showSessionCostPill: true,
 		showWorktreePill: false,
 		showWorktreeBranchName: false,
+		showStarredSessionsSection: true,
 		showLeftPanelGroupMemberCount: false,
 		leftPanelCollapsedPillsPerRow: 20,
 		showLeftPanelLocationPills: true,
@@ -1376,6 +1379,11 @@ export const useSettingsStore = create<SettingsStore>()((set, get) => {
 		setShowWorktreeBranchName: (value) => {
 			set({ showWorktreeBranchName: value });
 			window.maestro.settings.set('showWorktreeBranchName', value);
+		},
+
+		setShowStarredSessionsSection: (value) => {
+			set({ showStarredSessionsSection: value });
+			window.maestro.settings.set('showStarredSessionsSection', value);
 		},
 
 		setShowLeftPanelGroupMemberCount: (value) => {
@@ -2645,6 +2653,9 @@ export async function loadAllSettings(): Promise<void> {
 		if (allSettings['showWorktreeBranchName'] !== undefined)
 			patch.showWorktreeBranchName = allSettings['showWorktreeBranchName'] as boolean;
 
+		if (allSettings['showStarredSessionsSection'] !== undefined)
+			patch.showStarredSessionsSection = allSettings['showStarredSessionsSection'] as boolean;
+
 		if (allSettings['showLeftPanelGroupMemberCount'] !== undefined)
 			patch.showLeftPanelGroupMemberCount = allSettings['showLeftPanelGroupMemberCount'] as boolean;
 
@@ -2874,6 +2885,8 @@ export function getSettingsActions() {
 		setShowWorktreePill: state.setShowWorktreePill,
 		setShowWorktreeBranchName: state.setShowWorktreeBranchName,
 		setShowLeftPanelGroupMemberCount: state.setShowLeftPanelGroupMemberCount,
+		showStarredSessionsSection: state.showStarredSessionsSection,
+		setShowStarredSessionsSection: state.setShowStarredSessionsSection,
 		setLeftPanelCollapsedPillsPerRow: state.setLeftPanelCollapsedPillsPerRow,
 		setShowLeftPanelLocationPills: state.setShowLeftPanelLocationPills,
 		setShowLeftPanelGitIndicator: state.setShowLeftPanelGitIndicator,

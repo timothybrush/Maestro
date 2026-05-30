@@ -164,6 +164,13 @@ export const SETTINGS_METADATA: Record<string, SettingMetadata> = {
 		default: false,
 		category: 'appearance',
 	},
+	showStarredSessionsSection: {
+		description:
+			'Show a "Starred Sessions" section at the top of the left side bar listing every starred AI tab across all agents.',
+		type: 'boolean',
+		default: true,
+		category: 'appearance',
+	},
 	showLeftPanelGroupMemberCount: {
 		description:
 			'Show a member count in parentheses after each group name in the left side bar (e.g. "UNGROUPED AGENTS (24)").',

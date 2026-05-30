@@ -383,19 +383,29 @@ export function registerProcessHandlers(deps: ProcessHandlerDependencies): void 
 				}
 
 				// Resuming a Claude Code conversation under the API token source? Strip
-				// any subscription-account thinking blocks first. `resolvedConfigDirKey`
-				// is only set when this session uses Adaptive Mode (or previously ran
-				// interactive), i.e. the only cases where the transcript can contain
-				// cross-account thinking blocks that would trip the 400. Pure-API
-				// sessions (key unset) keep their validly-signed thinking blocks.
+				// any subscription-account thinking shells first. The sanitizer is
+				// narrowly scoped to empty-thinking blocks (maestro-p's signature-only
+				// shells); validly-signed API thinking blocks always carry non-empty
+				// reasoning text and are preserved, so this is safe to run on any
+				// transcript - including pure-API sessions that never touched
+				// Adaptive Mode. If `resolvedConfigDirKey` wasn't already computed
+				// (Batch Mode currently off, no maestro-p Path, no stale interactive
+				// state), compute it now so we can locate the transcript on disk.
 				if (
 					claudeResolvedMode === 'api' &&
 					config.agentSessionId &&
-					resolvedConfigDirKey &&
-					isClaudeCode
+					isClaudeCode &&
+					!isSshEnabled
 				) {
+					const configDirKey =
+						resolvedConfigDirKey ??
+						resolveConfigDirKey({
+							...(process.env as NodeJS.ProcessEnv),
+							...(agent?.defaultEnvVars ?? {}),
+							...(config.sessionCustomEnvVars ?? {}),
+						});
 					sanitizeClaudeTranscriptBeforeApiResume({
-						configDirKey: resolvedConfigDirKey,
+						configDirKey,
 						cwd: config.cwd,
 						agentSessionId: config.agentSessionId,
 						sessionId: config.sessionId,

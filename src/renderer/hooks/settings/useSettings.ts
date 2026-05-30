@@ -396,6 +396,8 @@ export interface UseSettingsReturn {
 	setShowWorktreeBranchName: (value: boolean) => void;
 
 	// Left side panel
+	showStarredSessionsSection: boolean;
+	setShowStarredSessionsSection: (value: boolean) => void;
 	showLeftPanelGroupMemberCount: boolean;
 	setShowLeftPanelGroupMemberCount: (value: boolean) => void;
 	leftPanelCollapsedPillsPerRow: number;
