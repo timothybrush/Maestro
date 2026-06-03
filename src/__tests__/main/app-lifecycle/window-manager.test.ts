@@ -310,6 +310,8 @@ describe('app-lifecycle/window-manager', () => {
 			const setKeys = mockWindowStateStore.set.mock.calls.map((call: unknown[]) => call[0]);
 			expect(setKeys).not.toContain('x');
 			expect(setKeys).not.toContain('y');
+			expect(setKeys).not.toContain('width');
+			expect(setKeys).not.toContain('height');
 			expect(setKeys).toContain('isMaximized');
 		});
 

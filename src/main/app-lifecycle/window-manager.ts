@@ -152,7 +152,8 @@ function resolveVisibleWindowPosition(state: WindowState): { x?: number; y?: num
 	// work area of some display, with a bottom margin so the title bar can't sit
 	// below the screen edge where it can't be grabbed.
 	const BOTTOM_MARGIN = 80;
-	const titleBar = { x: state.x + state.width / 2, y: state.y + 16 };
+	const TITLE_BAR_SAMPLE_Y = 16; // approximate title-bar height (px)
+	const titleBar = { x: state.x + state.width / 2, y: state.y + TITLE_BAR_SAMPLE_Y };
 
 	const isOnScreen = screen.getAllDisplays().some((display) => {
 		const { x, y, width, height } = display.workArea;
