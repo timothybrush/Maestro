@@ -74,6 +74,11 @@ function writeStoreFile<T>(filename: string, data: T): void {
  * main-process import chain.
  */
 function atomicWriteFileSync(filePath: string, content: string): void {
+	// Safety gate: never rename empty/unparseable content over a good file.
+	if (!content) {
+		throw new Error(`Refusing to write empty content to ${filePath}`);
+	}
+	JSON.parse(content); // throws before touching the file if content isn't valid JSON
 	const tmp = `${filePath}.tmp`;
 	fs.writeFileSync(tmp, content, 'utf-8');
 	fs.renameSync(tmp, filePath);

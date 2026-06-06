@@ -725,6 +725,35 @@ describe('HistoryManager', () => {
 				expect.any(String)
 			);
 		});
+
+		it('shrink guard allows a legitimate trim when maxEntries is lowered below file size', async () => {
+			// Realistic scenario: the user lowers their max-log-buffer setting, so a
+			// file with many entries legitimately shrinks to the new cap on the next
+			// add. The shrink tripwire must NOT block this (it keys off
+			// min(priorCount, limit), not priorCount alone).
+			const existingEntries: HistoryEntry[] = [];
+			for (let i = 0; i < 500; i++) existingEntries.push(createMockEntry({ id: `e-${i}` }));
+			const filePath = path.join(
+				'/mock/userData',
+				'history',
+				`${sanitizeSessionId('session-1')}.json`
+			);
+			mockExistsSync.mockImplementation((p: fs.PathLike) => p.toString() === filePath);
+			mockReadFileSync.mockReturnValue(createHistoryFileData('session-1', existingEntries));
+
+			const newEntry = createMockEntry({ id: 'fresh' });
+			await manager.addEntry('session-1', '/test/project', newEntry, 100);
+
+			// Write happened, trimmed to the new cap, newest first - not blocked.
+			expect(mockWriteFileSync).toHaveBeenCalledTimes(1);
+			const written = JSON.parse(mockWriteFileSync.mock.calls[0][1] as string);
+			expect(written.entries).toHaveLength(100);
+			expect(written.entries[0].id).toBe('fresh');
+			expect(vi.mocked(captureException)).not.toHaveBeenCalledWith(
+				expect.anything(),
+				expect.objectContaining({ operation: 'history:shrinkGuard' })
+			);
+		});
 	});
 
 	// ----------------------------------------------------------------

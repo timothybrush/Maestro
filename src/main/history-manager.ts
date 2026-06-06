@@ -327,10 +327,15 @@ export class HistoryManager {
 		// readers (and the CLI writer) from ever seeing a partial file.
 		await this.writeQueue.enqueue(sessionId, async () => {
 			let data: HistoryFileData;
+			// Count of entries we read from a SUCCESSFULLY-parsed existing file.
+			// -1 means "no trustworthy prior" (new file or corrupt-and-preserved),
+			// which disables the shrink tripwire below for this write.
+			let priorCount = -1;
 
 			try {
 				const raw = await fsp.readFile(filePath, 'utf-8');
 				data = parseHistoryFileData(raw).data;
+				priorCount = data.entries.length;
 			} catch (error) {
 				const code = (error as NodeJS.ErrnoException).code;
 				if (code === 'ENOENT') {
@@ -352,6 +357,24 @@ export class HistoryManager {
 			// Trim to max entries
 			if (data.entries.length > limit) {
 				data.entries = data.entries.slice(0, limit);
+			}
+
+			// Shrink tripwire: addEntry only ever GROWS the list (or trims to
+			// `limit`), so the result must hold at least `min(priorCount, limit)`
+			// entries. A smaller count means a logic regression upstream tried to
+			// destroy history through the add path - refuse the write and keep the
+			// good on-disk file rather than clobber it. Only enforced when we have
+			// a trustworthy prior (a clean parse of an existing file).
+			if (priorCount >= 0 && data.entries.length < Math.min(priorCount, limit)) {
+				const msg = `Refusing history write for session ${sessionId}: entry count would shrink ${priorCount} -> ${data.entries.length}`;
+				logger.error(msg, LOG_CONTEXT);
+				captureException(new Error(msg), {
+					operation: 'history:shrinkGuard',
+					sessionId,
+					priorCount,
+					newCount: data.entries.length,
+				});
+				return;
 			}
 
 			// Update projectPath if it changed

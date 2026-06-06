@@ -37,6 +37,17 @@ describe('atomicWriteJson', () => {
 		expect(() => JSON.parse(raw)).not.toThrow();
 		expect(JSON.parse(raw)).toEqual({ entries: [9] });
 	});
+
+	it('refuses to write undefined and leaves an existing file intact', async () => {
+		const file = path.join(dir, 'data.json');
+		await atomicWriteJson(file, { good: true });
+		// JSON.stringify(undefined) === undefined → must be rejected before any
+		// file I/O so the good file survives.
+		await expect(atomicWriteJson(file, undefined)).rejects.toThrow(/empty\/undefined/);
+		expect(JSON.parse(await fs.readFile(file, 'utf-8'))).toEqual({ good: true });
+		// No temp file left behind by the rejected write.
+		expect(await fs.readdir(dir)).toEqual(['data.json']);
+	});
 });
 
 describe('createKeyedWriteQueue', () => {
