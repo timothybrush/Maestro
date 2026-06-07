@@ -190,8 +190,8 @@ export function DirectorNotesModal({
 				tabIndex={-1}
 				className="rounded-xl shadow-2xl border overflow-hidden flex flex-col outline-none select-none"
 				style={{
-					width: '80vw',
-					maxWidth: 1400,
+					width: '60vw',
+					maxWidth: 1050,
 					// Fill the viewport leaving the same gap at the bottom as the
 					// overlay's pt-16 (4rem) leaves at the top.
 					height: 'calc(100vh - 8rem)',
