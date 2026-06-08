@@ -29,6 +29,7 @@ import {
 	CreateHandlerOptions,
 } from '../../utils/ipcHandler';
 import { getSshRemoteConfig, createSshRemoteStoreAdapter } from '../../utils/ssh-remote-resolver';
+import { getPrompt } from '../../prompt-manager';
 import { shellEscape } from '../../utils/shell-escape';
 import { buildSshCommandWithStdin } from '../../utils/ssh-command-builder';
 import { buildStreamJsonMessage } from '../../process-manager/utils/streamJsonBuilder';
@@ -523,6 +524,42 @@ export function registerProcessHandlers(deps: ProcessHandlerDependencies): void 
 								systemPromptLength: config.appendSystemPrompt.length,
 							}
 						);
+					}
+				}
+
+				// Copilot-CLI batch-mode preamble.
+				//
+				// Copilot's `-p` mode auto-flips into autopilot, where the model ends
+				// each run by calling the `task_complete` tool. The built-in autopilot
+				// system prompt biases the model toward calling that tool *early*,
+				// which manifests in Maestro as "the turn came back to me but the
+				// task wasn't actually done". The remedy isn't a CLI flag — it's a
+				// user-message preamble injected on every batch invocation that
+				// pushes back on premature completion and instructs the model to
+				// put its real conclusion in `task_complete.summary` (which is what
+				// CopilotShutdownWaiter.readCopilotFinalAnswer surfaces to the user).
+				//
+				// Repeated every turn intentionally: each batch spawn is a fresh
+				// Copilot process with its own system prompt reload, and the
+				// preamble has to ride in the user prompt to be in-context for
+				// that turn's reasoning. The text is user-editable via Maestro
+				// Prompts (`copilot-preamble`); an empty customization disables it.
+				if (agent?.id === 'copilot-cli' && effectivePrompt) {
+					try {
+						const preamble = getPrompt('copilot-preamble').trim();
+						if (preamble) {
+							effectivePrompt = `${preamble}\n\n${effectivePrompt}`;
+							logger.debug('Prepended copilot-preamble to user prompt', LOG_CONTEXT, {
+								preambleLength: preamble.length,
+							});
+						}
+					} catch (err) {
+						// Prompt not loaded yet (initializePrompts not called) — skip silently.
+						// This path is hit by tests that stub the IPC handler without bootstrapping
+						// prompts. Production code always runs initializePrompts() at app start.
+						logger.debug('copilot-preamble unavailable; skipping injection', LOG_CONTEXT, {
+							error: String(err),
+						});
 					}
 				}
 
