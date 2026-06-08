@@ -141,6 +141,8 @@ interface GroupChatListProps {
 	theme: Theme;
 	groupChats: GroupChat[];
 	activeGroupChatId: string | null;
+	/** Chat currently under the keyboard-navigation cursor (sidebar arrow keys), or null. */
+	keyboardSelectedChatId?: string | null;
 	onOpenGroupChat: (id: string) => void;
 	onNewGroupChat: () => void;
 	onEditGroupChat: (id: string) => void;
@@ -172,6 +174,7 @@ function GroupChatListInner({
 	theme,
 	groupChats,
 	activeGroupChatId,
+	keyboardSelectedChatId,
 	onOpenGroupChat,
 	onNewGroupChat,
 	onEditGroupChat,
@@ -390,6 +393,7 @@ function GroupChatListInner({
 						>
 							{sortedGroupChats.map((chat) => {
 								const isActive = activeGroupChatId === chat.id;
+								const isKeyboardSelected = keyboardSelectedChatId === chat.id;
 								// Determine status for this group chat
 								// For active chat, use the direct state props; for inactive chats, use the per-chat maps
 								const chatState = isActive
@@ -414,7 +418,14 @@ function GroupChatListInner({
 										key={chat.id}
 										className="flex items-center gap-2 px-3 py-1.5 cursor-pointer transition-colors hover:bg-white/5"
 										style={{
-											backgroundColor: isActive ? `${theme.colors.accent}20` : 'transparent',
+											backgroundColor: isActive
+												? `${theme.colors.accent}20`
+												: isKeyboardSelected
+													? `${theme.colors.bgActivity}40`
+													: 'transparent',
+											boxShadow: isKeyboardSelected
+												? `inset 2px 0 0 0 ${theme.colors.accent}`
+												: undefined,
 											opacity: chat.archived ? 0.5 : 1,
 										}}
 										onDoubleClick={() => onOpenGroupChat(chat.id)}

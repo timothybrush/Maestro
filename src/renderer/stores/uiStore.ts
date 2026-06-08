@@ -14,6 +14,19 @@ import { create } from 'zustand';
 import type { FocusArea, RightPanelTab, UsageDashboardViewMode } from '../types';
 import { notifyCenterFlash } from './centerFlashStore';
 
+/**
+ * Keyboard-selection cursor for the two Left Bar sections that are NOT plain
+ * agents: Starred Sessions (top) and Group Chats (bottom). Plain agent rows are
+ * tracked by `selectedSidebarIndex` (an index into navSessions); this token
+ * tracks the cursor when arrow-key navigation lands in a non-agent section, so
+ * those rows can show the same keyboard-selected highlight. Exactly one of
+ * (selectedSidebarIndex >= 0) / (sidebarExtraSelection !== null) is "live" at a
+ * time - landing on a starred/group-chat row sets selectedSidebarIndex to -1.
+ */
+export type SidebarExtraSelection =
+	| { kind: 'starred'; key: string }
+	| { kind: 'groupChat'; id: string };
+
 export interface UIStoreState {
 	// Sidebar
 	leftSidebarOpen: boolean;
@@ -34,6 +47,9 @@ export interface UIStoreState {
 
 	// Session sidebar selection
 	selectedSidebarIndex: number;
+	// Keyboard cursor when it lands on a Starred / Group Chat row (see type docs).
+	// null when the cursor is on a plain agent row (tracked by selectedSidebarIndex).
+	sidebarExtraSelection: SidebarExtraSelection | null;
 
 	// Output search
 	outputSearchOpen: boolean;
@@ -103,6 +119,7 @@ export interface UIStoreActions {
 
 	// Session sidebar selection
 	setSelectedSidebarIndex: (index: number | ((prev: number) => number)) => void;
+	setSidebarExtraSelection: (selection: SidebarExtraSelection | null) => void;
 
 	/**
 	 * Compatibility shim — fires a yellow center flash.
@@ -205,6 +222,7 @@ export const useUIStore = create<UIStore>()((set) => ({
 	preFilterActiveTabId: null,
 	preTerminalFileTabId: null,
 	selectedSidebarIndex: 0,
+	sidebarExtraSelection: null,
 	outputSearchOpen: false,
 	outputSearchQuery: '',
 	outputSearchRegex: false,
@@ -251,6 +269,7 @@ export const useUIStore = create<UIStore>()((set) => ({
 
 	setSelectedSidebarIndex: (v) =>
 		set((s) => ({ selectedSidebarIndex: resolve(v, s.selectedSidebarIndex) })),
+	setSidebarExtraSelection: (selection) => set({ sidebarExtraSelection: selection }),
 
 	setFlashNotification: (v) => {
 		const value = typeof v === 'function' ? v(null) : v;

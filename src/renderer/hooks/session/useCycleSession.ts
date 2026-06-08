@@ -17,6 +17,7 @@ import { useGroupChatStore } from '../../stores/groupChatStore';
 import { useUIStore } from '../../stores/uiStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { compareNamesIgnoringEmojis } from '../session/useSortedSessions';
+import type { StarredItem } from './useStarredItems';
 
 // ============================================================================
 // Dependencies interface
@@ -27,6 +28,14 @@ export interface UseCycleSessionDeps {
 	sortedSessions: Session[];
 	/** Open a group chat (loads messages etc.) */
 	handleOpenGroupChat: (groupChatId: string) => void;
+	/**
+	 * Starred Sessions rows (open starred tabs + closed starred sessions), in the
+	 * same display order as the Left Bar's "Starred Sessions" section. Cycling
+	 * traverses these at the top of the visual order when the section is shown.
+	 */
+	starredItems: StarredItem[];
+	/** Activate a starred row (focus its tab, or resume a closed session). */
+	activateStarredItem: (item: StarredItem) => void | Promise<void>;
 }
 
 // ============================================================================
@@ -43,7 +52,7 @@ export interface UseCycleSessionReturn {
 // ============================================================================
 
 export function useCycleSession(deps: UseCycleSessionDeps): UseCycleSessionReturn {
-	const { sortedSessions, handleOpenGroupChat } = deps;
+	const { sortedSessions, handleOpenGroupChat, starredItems, activateStarredItem } = deps;
 
 	// --- Reactive subscriptions ---
 	const sessions = useSessionStore((s) => s.sessions);
@@ -63,25 +72,32 @@ export function useCycleSession(deps: UseCycleSessionDeps): UseCycleSessionRetur
 	// --- Settings ---
 	const ungroupedCollapsed = useSettingsStore((s) => s.ungroupedCollapsed);
 	const groupChatsExpanded = useSettingsStore((s) => s.groupChatsExpanded);
+	const starredSectionCollapsed = useSettingsStore((s) => s.starredSessionsCollapsed);
 
 	const cycleSession = useCallback(
 		(dir: 'next' | 'prev') => {
 			// Build the visual order of items as they appear in the sidebar.
 			// This matches the actual rendering order in SessionList.tsx:
-			// 1. Bookmarks section (if open) - sorted alphabetically
-			// 2. Groups (sorted alphabetically) - each with sessions sorted alphabetically
-			// 3. Ungrouped sessions - sorted alphabetically
-			// 4. Group Chats section (if expanded) - sorted alphabetically
+			// 1. Starred Sessions section (if shown + expanded) - sorted by display name
+			// 2. Bookmarks section (if open) - sorted alphabetically
+			// 3. Groups (sorted alphabetically) - each with sessions sorted alphabetically
+			// 4. Ungrouped sessions - sorted alphabetically
+			// 5. Group Chats section (if expanded) - sorted alphabetically
 			//
 			// A bookmarked session visually appears in BOTH the bookmarks section AND its
 			// regular location (group or ungrouped). The same session can appear twice in
 			// the visual order. We track the current position with cyclePosition to
 			// allow cycling through duplicate occurrences correctly.
+			//
+			// Starred rows are similar: a starred row's `id` is its parent agent's session
+			// id, so the same agent can appear in the starred section AND its regular
+			// location. cyclePosition keeps the two occurrences distinct.
 
-			// Visual order item can be either a session or a group chat
+			// Visual order item can be a session, a group chat, or a starred row.
 			type VisualOrderItem =
 				| { type: 'session'; id: string; name: string }
-				| { type: 'groupChat'; id: string; name: string };
+				| { type: 'groupChat'; id: string; name: string }
+				| { type: 'starred'; id: string; name: string; starredKey: string };
 
 			const visualOrder: VisualOrderItem[] = [];
 
@@ -120,6 +136,21 @@ export function useCycleSession(deps: UseCycleSessionDeps): UseCycleSessionRetur
 			};
 
 			if (leftSidebarOpen) {
+				// Starred Sessions section (if shown, expanded, and non-empty). Hidden
+				// while the unread-agents filter is active, mirroring SessionList which
+				// drops the section under that filter. starredItems is already sorted by
+				// display name to match the rendered order.
+				if (!starredSectionCollapsed && !showUnreadAgentsOnly && starredItems.length > 0) {
+					visualOrder.push(
+						...starredItems.map((item) => ({
+							type: 'starred' as const,
+							id: item.parentSessionId,
+							name: item.displayName,
+							starredKey: item.key,
+						}))
+					);
+				}
+
 				// Bookmarks section (if expanded and has bookmarked sessions)
 				if (!bookmarksCollapsed) {
 					const bookmarkedSessions = sessions
@@ -223,17 +254,29 @@ export function useCycleSession(deps: UseCycleSessionDeps): UseCycleSessionRetur
 				);
 			}
 
+			// Dispatch activation for a slot in the visual order. A session sets the
+			// active session directly; a group chat loads its messages; a starred row
+			// focuses its tab or resumes its closed session (activateStarredItem sets
+			// the active session itself).
+			const activateVisualItem = (item: VisualOrderItem) => {
+				if (item.type === 'session') {
+					setActiveGroupChatId(null);
+					setActiveSessionIdInternal(item.id);
+				} else if (item.type === 'starred') {
+					const starred = starredItems.find((s) => s.key === item.starredKey);
+					if (starred) {
+						setActiveGroupChatId(null);
+						void activateStarredItem(starred);
+					}
+				} else {
+					handleOpenGroupChat(item.id);
+				}
+			};
+
 			if (currentIndex === -1) {
 				// Current item not visible, select first visible item
 				setCyclePosition(0);
-				const firstItem = visualOrder[0];
-				if (firstItem.type === 'session') {
-					setActiveGroupChatId(null);
-					setActiveSessionIdInternal(firstItem.id);
-				} else {
-					// When switching to a group chat via cycling, use handleOpenGroupChat to load messages
-					handleOpenGroupChat(firstItem.id);
-				}
+				activateVisualItem(visualOrder[0]);
 				return;
 			}
 
@@ -246,14 +289,7 @@ export function useCycleSession(deps: UseCycleSessionDeps): UseCycleSessionRetur
 			}
 
 			setCyclePosition(nextIndex);
-			const nextItem = visualOrder[nextIndex];
-			if (nextItem.type === 'session') {
-				setActiveGroupChatId(null);
-				setActiveSessionIdInternal(nextItem.id);
-			} else {
-				// When switching to a group chat via cycling, use handleOpenGroupChat to load messages
-				handleOpenGroupChat(nextItem.id);
-			}
+			activateVisualItem(visualOrder[nextIndex]);
 		},
 		[
 			sessions,
@@ -268,6 +304,9 @@ export function useCycleSession(deps: UseCycleSessionDeps): UseCycleSessionRetur
 			groupChats,
 			sortedSessions,
 			handleOpenGroupChat,
+			starredSectionCollapsed,
+			starredItems,
+			activateStarredItem,
 		]
 	);
 

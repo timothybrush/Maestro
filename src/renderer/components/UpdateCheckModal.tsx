@@ -153,7 +153,11 @@ export function UpdateCheckModal({ theme, onClose }: UpdateCheckModalProps) {
 			progress: { percent: 0, bytesPerSecond: 0, total: 0, transferred: 0 },
 		});
 
-		const downloadResult = await window.maestro.updates.download();
+		// Hand the main process the exact release tag we're offering so it can fetch
+		// from GitHub's CDN asset path instead of the flaky `releases.atom` feed.
+		// `result.releases` is newest-first, so [0] is the version shown to the user.
+		const targetTag = result?.releases?.[0]?.tag_name;
+		const downloadResult = await window.maestro.updates.download(targetTag);
 		if (!downloadResult.success && downloadResult.error) {
 			setDownloadError(downloadResult.error);
 			setDownloadStatus({ status: 'error', error: downloadResult.error });
@@ -224,7 +228,7 @@ export function UpdateCheckModal({ theme, onClose }: UpdateCheckModalProps) {
 			priority={MODAL_PRIORITIES.UPDATE_CHECK}
 			onClose={onClose}
 			customHeader={customHeader}
-			width={625}
+			width={1250}
 			maxHeight="80vh"
 		>
 			<div className="space-y-4 -my-2">

@@ -209,6 +209,8 @@ const createDefaultProps = (overrides: Partial<Parameters<typeof SessionList>[0]
 	webInterfaceUrl: null,
 	showSessionJumpNumbers: false,
 	visibleSessions: [] as Session[],
+	starredItems: [],
+	activateStarredItem: vi.fn(),
 	toggleGlobalLive: vi.fn(),
 	restartWebServer: vi.fn().mockResolvedValue(null),
 	toggleGroup: vi.fn(),
