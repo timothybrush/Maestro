@@ -576,7 +576,7 @@ export function createMarkdownComponents(options: MarkdownComponentsOptions): Pa
 								}
 							}
 						} else if (href && onExternalLinkClick && /^https?:\/\/|^mailto:/.test(href)) {
-							onExternalLinkClick(href, { ctrlKey: e.ctrlKey });
+							onExternalLinkClick(href, { ctrlKey: e.metaKey || e.ctrlKey });
 						} else if (
 							href &&
 							onFileClick &&
@@ -759,7 +759,7 @@ export function createWizardBubbleMarkdownComponents(theme: Theme): Partial<Comp
 					style: { color: theme.colors.accent },
 					onClick: (e: React.MouseEvent) => {
 						if (href && /^https?:\/\/|^mailto:/.test(href)) {
-							openUrl(href, { ctrlKey: e.ctrlKey });
+							openUrl(href, { ctrlKey: e.metaKey || e.ctrlKey });
 						}
 					},
 				},
@@ -878,7 +878,7 @@ export function createReleaseNotesMarkdownComponents(theme: Theme): Partial<Comp
 					onClick: (e: React.MouseEvent) => {
 						e.preventDefault();
 						if (href && /^https?:\/\/|^mailto:/.test(href)) {
-							openUrl(href, { ctrlKey: e.ctrlKey });
+							openUrl(href, { ctrlKey: e.metaKey || e.ctrlKey });
 						}
 					},
 					className: 'hover:underline cursor-pointer',
