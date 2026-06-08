@@ -52,6 +52,15 @@ export interface ParsedArgs {
 	passThroughArgs: string[];
 	streamThinking: boolean;
 	maxWaitSeconds: number;
+	/**
+	 * Budget for the FIRST JSONL entry to arrive after the prompt is sent
+	 * (handshake + cold start + claude beginning the turn). Distinct from
+	 * `maxWaitSeconds`, which governs the gap BETWEEN bytes once output is
+	 * already flowing. A turn that never produces any output (e.g. the prompt
+	 * was lost into a startup modal) fails at this bound with a `first_byte_timeout`
+	 * instead of burning the full idle budget. Always <= maxWaitSeconds.
+	 */
+	firstByteTimeoutSeconds: number;
 	resumeSessionId: string | null;
 	/**
 	 * True when invoked with `--input-format stream-json`. Maestro sets this
@@ -73,6 +82,14 @@ export interface ParseArgsOptions {
 }
 
 export const DEFAULT_MAX_WAIT_SECONDS = 300;
+
+// How long to wait for claude to produce its FIRST JSONL entry after the prompt
+// is sent, before giving up with `first_byte_timeout`. Generous enough to cover
+// a cold TUI start + MCP handshake + model warmup (the discovery floor comment
+// notes cold starts routinely need well over 10s), but far below the idle
+// budget so a turn that never starts fails fast and loud instead of hanging the
+// whole `--max-wait` window. Overridable via `--first-byte-timeout`.
+export const DEFAULT_FIRST_BYTE_TIMEOUT_SECONDS = 120;
 
 const PROMPT_VALUE_FLAGS = new Set(['-p', '--print', '--prompt']);
 const CONSUMED_BOOLEAN_FLAGS = new Set(['-h', '--help', '-v', '--version']);
@@ -127,6 +144,7 @@ export function parseArgs(argv: string[], options: ParseArgsOptions = {}): Parse
 	let promptFromPositional: string | null = null;
 	let streamThinking = false;
 	let maxWaitSeconds = DEFAULT_MAX_WAIT_SECONDS;
+	let firstByteTimeoutSeconds = DEFAULT_FIRST_BYTE_TIMEOUT_SECONDS;
 	let resumeSessionId: string | null = null;
 	let streamJsonInput = false;
 	const passThroughArgs: string[] = [];
@@ -211,6 +229,26 @@ export function parseArgs(argv: string[], options: ParseArgsOptions = {}): Parse
 				} else {
 					warn(
 						`maestro-p: --max-wait "${value}" is not a positive integer; using default ${DEFAULT_MAX_WAIT_SECONDS}s.`
+					);
+				}
+			}
+			i += 1;
+			continue;
+		}
+
+		if (flag === '--first-byte-timeout') {
+			const value = consumeValue();
+			if (value === undefined) {
+				warn(
+					`maestro-p: --first-byte-timeout requires a value; using default ${DEFAULT_FIRST_BYTE_TIMEOUT_SECONDS}s.`
+				);
+			} else {
+				const parsed = Number.parseInt(value, 10);
+				if (Number.isFinite(parsed) && parsed > 0) {
+					firstByteTimeoutSeconds = parsed;
+				} else {
+					warn(
+						`maestro-p: --first-byte-timeout "${value}" is not a positive integer; using default ${DEFAULT_FIRST_BYTE_TIMEOUT_SECONDS}s.`
 					);
 				}
 			}
@@ -329,12 +367,21 @@ export function parseArgs(argv: string[], options: ParseArgsOptions = {}): Parse
 		}
 	}
 
+	// The first-byte budget never exceeds the overall idle budget: if a caller
+	// sets a tight `--max-wait` (shorter than the first-byte default), the
+	// overall budget wins so we don't keep waiting for a first byte past the
+	// point the caller wanted the whole run abandoned.
+	if (firstByteTimeoutSeconds > maxWaitSeconds) {
+		firstByteTimeoutSeconds = maxWaitSeconds;
+	}
+
 	return {
 		prompt,
 		mode,
 		passThroughArgs,
 		streamThinking,
 		maxWaitSeconds,
+		firstByteTimeoutSeconds,
 		resumeSessionId,
 		streamJsonInput,
 	};

@@ -195,6 +195,17 @@ export class TuiDriver extends EventEmitter {
 			return false;
 		}
 		this.tapsSent += 1;
+		// Drop everything painted up to and including the modal we just
+		// dismissed, so the unanchored READY_REGEX can't match the modal's own
+		// selector glyph (the trust prompt renders `❯ 1. Yes, I trust this
+		// folder`, whose `❯ ` satisfies `[›❯]\s`). Without this, `ready` fires
+		// on the SAME data chunk that paints the modal, the runner sends the
+		// prompt into the still-open modal where it's consumed as menu
+		// keystrokes, the turn never starts, and the run burns its entire
+		// budget waiting for JSONL that never comes. After the tap dismisses
+		// the modal the genuine editor prompt re-paints `❯` into a now-empty
+		// buffer, so `ready` only fires once we're actually at the input box.
+		this.rollingBuffer = '';
 		return true;
 	}
 

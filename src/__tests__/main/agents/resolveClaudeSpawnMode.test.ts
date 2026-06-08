@@ -229,6 +229,61 @@ describe('applyClaudeSpawnDecision (batch surfaces)', () => {
 		});
 	});
 
+	it('injects --max-wait (rounded up) before the maestro-p flags when maxWaitSeconds is given', () => {
+		const result = applyClaudeSpawnDecision({
+			decision: {
+				mode: 'interactive',
+				reason: 'auto',
+				maestroPBinPath: '/bundled/maestro-p.js',
+				claudeRealBinPath: '/bin/claude',
+			},
+			interactiveModeArgs: ['--dangerously-skip-permissions'],
+			command: 'claude',
+			args: ['--print', '--', 'hello there'],
+			execPath: '/usr/bin/node',
+			maxWaitSeconds: 3599.4,
+		});
+		// --max-wait must land AFTER the script but BEFORE the batch args, which
+		// terminate with `-- <prompt>` (anything after `--` is read as the prompt
+		// positional, not a flag). Value is ceil()'d to a whole second.
+		expect(result.args).toEqual([
+			'/bundled/maestro-p.js',
+			'--max-wait',
+			'3600',
+			'--dangerously-skip-permissions',
+			'--print',
+			'--',
+			'hello there',
+		]);
+	});
+
+	it('omits --max-wait when maxWaitSeconds is absent or non-positive', () => {
+		const base = {
+			decision: {
+				mode: 'interactive' as const,
+				reason: 'auto' as const,
+				maestroPBinPath: '/bundled/maestro-p.js',
+				claudeRealBinPath: '/bin/claude',
+			},
+			interactiveModeArgs: [],
+			command: 'claude',
+			args: ['--print', '--', 'hi'],
+			execPath: '/usr/bin/node',
+		};
+		expect(applyClaudeSpawnDecision(base).args).toEqual([
+			'/bundled/maestro-p.js',
+			'--print',
+			'--',
+			'hi',
+		]);
+		expect(applyClaudeSpawnDecision({ ...base, maxWaitSeconds: 0 }).args).toEqual([
+			'/bundled/maestro-p.js',
+			'--print',
+			'--',
+			'hi',
+		]);
+	});
+
 	it('adds NODE_PATH to the unpacked modules dir when running packaged (resourcesPath set)', () => {
 		const original = process.resourcesPath;
 		try {

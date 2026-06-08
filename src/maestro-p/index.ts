@@ -61,7 +61,7 @@ program
 			'',
 			'Argument handling:',
 			'  - Prompt-input flags (consumed): -p, --print, --prompt',
-			'  - maestro-p flags (consumed):    --status, --stream-thinking, --max-wait, --help, --version',
+			'  - maestro-p flags (consumed):    --status, --stream-thinking, --max-wait, --first-byte-timeout, --help, --version',
 			'  - Stripped (dropped with warning): --output-format, --input-format, --verbose',
 			'  - Everything else is forwarded verbatim to the spawned `claude` TUI.',
 			'',
@@ -221,6 +221,13 @@ async function runMode(args: ParsedArgs): Promise<never> {
 	let finalized = false;
 	let watchdogTimer: NodeJS.Timeout | null = null;
 	let graceTimer: NodeJS.Timeout | null = null;
+	// Fires if no JSONL entry has arrived within firstByteTimeoutSeconds of the
+	// TUI starting. Distinct from the idle watchdog: this catches a turn that
+	// NEVER produces output (prompt lost to a startup modal, claude wedged
+	// pre-turn), failing fast instead of riding the full idle budget. Cleared
+	// the moment the first entry lands (see handleEntry).
+	let firstByteTimer: NodeJS.Timeout | null = null;
+	let firstEntrySeen = false;
 	let limitHit = false;
 	let aggregatedText = '';
 	const usage = emptyUsage();
@@ -237,6 +244,22 @@ async function runMode(args: ParsedArgs): Promise<never> {
 		if (graceTimer) {
 			clearTimeout(graceTimer);
 			graceTimer = null;
+		}
+		if (firstByteTimer) {
+			clearTimeout(firstByteTimer);
+			firstByteTimer = null;
+		}
+	};
+
+	// Cancel the first-byte timer as soon as claude writes anything to the
+	// transcript — any entry (even the prompt-echo user row) proves the turn
+	// started, so from here only the idle watchdog governs the run.
+	const markFirstEntrySeen = (): void => {
+		if (firstEntrySeen) return;
+		firstEntrySeen = true;
+		if (firstByteTimer) {
+			clearTimeout(firstByteTimer);
+			firstByteTimer = null;
 		}
 	};
 
@@ -349,6 +372,10 @@ async function runMode(args: ParsedArgs): Promise<never> {
 	};
 
 	const handleEntry = (entry: unknown): void => {
+		// Any transcript line means claude started the turn — cancel the
+		// first-byte timer before the init-gating buffer logic so a pre-init
+		// entry still counts as "first byte".
+		markFirstEntrySeen();
 		if (!initEmitted) {
 			pendingEntries.push(entry);
 			return;
@@ -380,6 +407,21 @@ async function runMode(args: ParsedArgs): Promise<never> {
 	});
 
 	await driver.start();
+
+	// Arm the first-byte timer the moment the TUI is up. It spans the ready
+	// handshake, session discovery, and the wait for claude's first transcript
+	// entry — any of which stalling indefinitely (a prompt swallowed by a
+	// startup modal is the canonical case) trips it. The ready-timeout (exit 4)
+	// covers a TUI that never reaches its prompt; this covers a TUI that reaches
+	// the prompt but never starts a turn.
+	const firstByteTimeoutMs = args.firstByteTimeoutSeconds * 1000;
+	firstByteTimer = setTimeout(() => {
+		if (finalized || firstEntrySeen) return;
+		process.stderr.write(
+			`maestro-p: no transcript output within ${args.firstByteTimeoutSeconds}s of sending the prompt — claude never started the turn (prompt may have been swallowed by a startup modal). Failing with first_byte_timeout.\n`
+		);
+		finalize({ isError: true, error: 'first_byte_timeout', exitCode: 5 });
+	}, firstByteTimeoutMs);
 
 	if (args.resumeSessionId) {
 		// Resume path: the JSONL already exists from the prior turn(s); tail
@@ -413,18 +455,34 @@ async function runMode(args: ParsedArgs): Promise<never> {
 			cwd,
 			spawnTimestamp: startMs,
 			expectSessionId: freshSessionId ?? undefined,
-			// Defer to the caller's overall budget rather than imposing a
-			// separate, shorter sub-limit. The caller already enforces its own
-			// process-level timeout (e.g. tab naming kills at 45s), so this only
-			// ever extends the window for a slow cold start, never overruns it.
-			timeoutMs: Math.max(DISCOVERY_TIMEOUT_FLOOR_MS, args.maxWaitSeconds * 1000),
+			// Bound discovery by the first-byte budget, not the (much larger)
+			// idle budget. The session file only appears once claude actually
+			// starts the turn, so "file never showed up" is the same failure as
+			// "no first byte" — both should fail fast rather than ride the full
+			// --max-wait window. The FLOOR still covers a slow cold start.
+			timeoutMs: Math.max(DISCOVERY_TIMEOUT_FLOOR_MS, firstByteTimeoutMs),
 		});
 		driver.send(prompt);
-		const { sessionId, jsonlPath } = await discoveryPromise;
-		resolvedSessionId = sessionId;
-		emitter.emitInit({ sessionId, model: null, cwd });
+		let discovered: { sessionId: string; jsonlPath: string };
+		try {
+			discovered = await discoveryPromise;
+		} catch (err) {
+			// Discovery timed out (or failed): claude never wrote a session
+			// transcript, i.e. the turn never started. Finalize with the same
+			// first_byte_timeout contract instead of letting the rejection
+			// bubble to main()'s catch (a bare exit 1 with no result envelope).
+			if (!finalized) {
+				process.stderr.write(
+					`maestro-p: session discovery failed: ${err instanceof Error ? err.message : String(err)}\n`
+				);
+				finalize({ isError: true, error: 'first_byte_timeout', exitCode: 5 });
+			}
+			return new Promise<never>(() => undefined);
+		}
+		resolvedSessionId = discovered.sessionId;
+		emitter.emitInit({ sessionId: discovered.sessionId, model: null, cwd });
 		initEmitted = true;
-		tailer = new JsonlTailer({ path: jsonlPath, skipExisting: false });
+		tailer = new JsonlTailer({ path: discovered.jsonlPath, skipExisting: false });
 		tailer.on('entry', handleEntry);
 		tailer.on('parse-error', handleParseError);
 		await tailer.start();

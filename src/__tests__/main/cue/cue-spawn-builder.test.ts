@@ -420,9 +420,12 @@ describe('cue-spawn-builder', () => {
 					const { command, args, env } = result.spec;
 					// maestro-p runs via the Node execPath...
 					expect(command).toBe(process.execPath);
-					// ...with the maestro-p script + its interactive flags first...
+					// ...with the maestro-p script first, then --max-wait derived from
+					// the run's timeoutMs (30000ms -> 30s), then the interactive flags...
 					expect(args[0]).toBe('/bundled/maestro-p.js');
-					expect(args[1]).toBe('--dangerously-skip-permissions');
+					expect(args[1]).toBe('--max-wait');
+					expect(args[2]).toBe('30');
+					expect(args[3]).toBe('--dangerously-skip-permissions');
 					// ...and the substituted prompt still the trailing positional.
 					expect(args[args.length - 1]).toBe('Hello world');
 					// maestro-p is told which real claude binary to drive.

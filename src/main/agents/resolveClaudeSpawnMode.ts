@@ -214,6 +214,15 @@ export interface ApplyClaudeSpawnInput {
 	customEnvVars?: Record<string, string>;
 	/** Defaults to process.execPath; injectable for tests. */
 	execPath?: string;
+	/**
+	 * Overall idle budget for the maestro-p run, in seconds. Forwarded as
+	 * `--max-wait`. Background callers (Cue, Auto Run) MUST pass this so the run
+	 * honors their configured timeout instead of maestro-p's 300s default — the
+	 * default silently killed long-running background turns. Omit to let
+	 * maestro-p use its built-in default (fine for short interactive surfaces
+	 * like tab naming that enforce their own outer process timeout).
+	 */
+	maxWaitSeconds?: number;
 }
 
 export interface ApplyClaudeSpawnResult {
@@ -277,9 +286,17 @@ export function applyClaudeSpawnDecision(input: ApplyClaudeSpawnInput): ApplyCla
 			const existing = env.NODE_PATH ?? process.env.NODE_PATH;
 			env.NODE_PATH = existing ? `${asarModules}${path.delimiter}${existing}` : asarModules;
 		}
+		// `--max-wait` must precede the batch args because those end with the
+		// `-- <prompt>` end-of-options marker; anything after `--` is read by
+		// maestro-p's parser as the prompt positional, not a flag. Slotting it
+		// right after the script keeps it inside the flag region.
+		const maxWaitArgs =
+			typeof input.maxWaitSeconds === 'number' && input.maxWaitSeconds > 0
+				? ['--max-wait', String(Math.ceil(input.maxWaitSeconds))]
+				: [];
 		return {
 			command: input.execPath ?? process.execPath,
-			args: [decision.maestroPBinPath, ...(interactiveModeArgs ?? []), ...args],
+			args: [decision.maestroPBinPath, ...maxWaitArgs, ...(interactiveModeArgs ?? []), ...args],
 			customEnvVars: env,
 		};
 	}

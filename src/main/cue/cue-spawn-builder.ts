@@ -219,6 +219,11 @@ export async function buildSpawnSpec(
 			command,
 			args: spawnArgs,
 			customEnvVars: spawnEnvVars,
+			// Honor the Cue run's configured timeout as maestro-p's idle budget
+			// (`--max-wait`) instead of its 300s default. Without this a Cue
+			// prompt dispatch through maestro-p was capped at 300s regardless of
+			// `timeout_minutes`, killing every long-running background turn.
+			maxWaitSeconds: Math.ceil(config.timeoutMs / 1000),
 		});
 		command = applied.command;
 		spawnArgs = applied.args;
