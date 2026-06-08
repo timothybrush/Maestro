@@ -176,6 +176,7 @@ import { useQuitWhenIdle } from './hooks/useQuitWhenIdle';
 import type { RightPanelTab, Session, QueuedItem, CustomAICommand, ThinkingItem } from './types';
 import { THEMES } from './constants/themes';
 import { generateId } from './utils/ids';
+import { reorderQueueItem } from './utils/executionQueue';
 import { getContextColor } from './utils/theme';
 // safeClipboardWrite moved to AppStandaloneModals (GistPublishModal handler)
 import {
@@ -1461,6 +1462,20 @@ function MaestroConsoleInner() {
 		}));
 	}, []);
 
+	// Reorder a queued item within the active session's inline chat list. The
+	// inline list is filtered to a single tab, so fromIndex/toIndex address that
+	// tab's items; reorderQueueItem rearranges them while keeping other tabs'
+	// queued items in their absolute positions (see the helper for details).
+	const handleReorderQueuedItem = useCallback(
+		(fromIndex: number, toIndex: number, tabId?: string) => {
+			updateSessionWith(activeSessionIdRef.current, (s) => ({
+				...s,
+				executionQueue: reorderQueueItem(s.executionQueue, fromIndex, toIndex, tabId),
+			}));
+		},
+		[]
+	);
+
 	// toggleBookmark — provided by useSessionCrud hook
 
 	const handleFocusFileInGraph = useFileExplorerStore.getState().focusFileInGraph;
@@ -2526,6 +2541,7 @@ function MaestroConsoleInner() {
 		handleDeleteLog,
 		handleRemoveQueuedItem,
 		handleToggleQueuedItemPause,
+		handleReorderQueuedItem,
 		handleForceSendQueuedItem,
 		forcedParallelEnabled: settings.forcedParallelExecution,
 		getForceSendContext,

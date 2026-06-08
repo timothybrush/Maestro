@@ -1225,6 +1225,7 @@ interface TerminalOutputProps {
 	onDeleteLog?: (logId: string) => number | null; // Returns the index to scroll to after deletion
 	onRemoveQueuedItem?: (itemId: string) => void; // Callback to remove a queued item from execution queue
 	onTogglePauseQueuedItem?: (itemId: string) => void; // Callback to toggle held/paused state of a queued item
+	onReorderQueuedItem?: (fromIndex: number, toIndex: number, tabId?: string) => void; // Reorder a queued item within the active tab's queue
 	onForceSendQueuedItem?: (itemId: string) => void; // Callback to Force Send a queued item (parallel execution)
 	forcedParallelEnabled?: boolean; // Whether forcedParallelExecution setting is on (gates Force Send button)
 	getForceSendContext?: (
@@ -1290,6 +1291,7 @@ export const TerminalOutput = memo(
 			onDeleteLog,
 			onRemoveQueuedItem,
 			onTogglePauseQueuedItem,
+			onReorderQueuedItem,
 			onForceSendQueuedItem,
 			forcedParallelEnabled,
 			getForceSendContext,
@@ -2290,6 +2292,12 @@ export const TerminalOutput = memo(
 							theme={theme}
 							onRemoveQueuedItem={onRemoveQueuedItem}
 							onTogglePauseQueuedItem={onTogglePauseQueuedItem}
+							onReorderItems={
+								onReorderQueuedItem
+									? (fromIndex, toIndex) =>
+											onReorderQueuedItem(fromIndex, toIndex, activeTabId || undefined)
+									: undefined
+							}
 							onForceSendQueuedItem={onForceSendQueuedItem}
 							forcedParallelEnabled={forcedParallelEnabled}
 							getForceSendContext={getForceSendContext}
