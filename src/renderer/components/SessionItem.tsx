@@ -121,6 +121,13 @@ export interface SessionItemProps {
 	wizardGeneratingDocs?: boolean; // Wizard is generating Auto Run documents (drives pulse)
 	worktreeChildCount?: number; // Number of worktree children (used for collapsed count badge)
 
+	/**
+	 * When true, the row can neither be dragged nor accept drops. Used for the
+	 * Bookmarks section, which is a filtered view: reordering/regrouping there
+	 * would be meaningless (and dropping fell through to "ungroup").
+	 */
+	dragDisabled?: boolean;
+
 	// Handlers
 	onSelect: () => void;
 	onDragStart: () => void;
@@ -167,6 +174,7 @@ export const SessionItem = memo(function SessionItem({
 	wizardActive = false,
 	wizardGeneratingDocs = false,
 	worktreeChildCount,
+	dragDisabled = false,
 	onSelect,
 	onDragStart,
 	onDragOver,
@@ -236,10 +244,10 @@ export const SessionItem = memo(function SessionItem({
 		<div
 			key={`${variant}-${groupId || ''}-${session.id}`}
 			data-nav-key={navDomKey}
-			draggable
-			onDragStart={onDragStart}
-			onDragOver={onDragOver}
-			onDrop={onDrop}
+			draggable={!dragDisabled}
+			onDragStart={dragDisabled ? undefined : onDragStart}
+			onDragOver={dragDisabled ? undefined : onDragOver}
+			onDrop={dragDisabled ? undefined : onDrop}
 			onClick={onSelect}
 			onContextMenu={onContextMenu}
 			className={getContainerClassName()}
