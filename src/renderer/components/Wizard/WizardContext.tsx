@@ -43,6 +43,25 @@ export type {
 
 const WizardContext = createContext<WizardContextAPI | null>(null);
 
+async function setWizardResumeStateAsync(
+	value: SerializableWizardState | null,
+	functionName: string
+): Promise<void> {
+	try {
+		await window.maestro.settings.set('wizardResumeState', value);
+	} catch (error) {
+		captureException(error, {
+			extra: {
+				source: 'WizardContext',
+				function: functionName,
+				functionName,
+				setting: 'wizardResumeState',
+			},
+		});
+		throw error;
+	}
+}
+
 export function WizardProvider({ children }: WizardProviderProps) {
 	const [state, dispatch] = useReducer(wizardReducer, initialState);
 
@@ -220,8 +239,8 @@ export function WizardProvider({ children }: WizardProviderProps) {
 		dispatch({ type: 'SET_WANTS_TOUR', wantsTour });
 	}, []);
 
-	const completeWizard = useCallback((sessionId: string | null) => {
-		window.maestro.settings.set('wizardResumeState', null);
+	const completeWizard = useCallback(async (sessionId: string | null) => {
+		await setWizardResumeStateAsync(null, 'completeWizard');
 		dispatch({ type: 'SET_COMPLETE', sessionId });
 	}, []);
 
@@ -229,8 +248,8 @@ export function WizardProvider({ children }: WizardProviderProps) {
 		return buildSerializableWizardState(state);
 	}, [state]);
 
-	const saveStateForResume = useCallback(() => {
-		window.maestro.settings.set('wizardResumeState', getSerializableState());
+	const saveStateForResume = useCallback(async () => {
+		await setWizardResumeStateAsync(getSerializableState(), 'saveStateForResume');
 	}, [getSerializableState]);
 
 	const restoreState = useCallback((savedState: Partial<WizardState>) => {
@@ -267,8 +286,8 @@ export function WizardProvider({ children }: WizardProviderProps) {
 		}
 	}, []);
 
-	const clearResumeState = useCallback(() => {
-		window.maestro.settings.set('wizardResumeState', null);
+	const clearResumeState = useCallback(async () => {
+		await setWizardResumeStateAsync(null, 'clearResumeState');
 	}, []);
 
 	const stateRef = useRef(state);
@@ -276,9 +295,9 @@ export function WizardProvider({ children }: WizardProviderProps) {
 
 	useEffect(() => {
 		if (STEP_INDEX[state.currentStep] > 1) {
-			window.maestro.settings.set(
-				'wizardResumeState',
-				buildSerializableWizardState(stateRef.current)
+			void setWizardResumeStateAsync(
+				buildSerializableWizardState(stateRef.current),
+				'autoSaveResumeState'
 			);
 		}
 	}, [state.currentStep]);

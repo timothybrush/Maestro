@@ -224,10 +224,7 @@ describe('DocumentEditor', () => {
 				'png'
 			);
 		});
-		expect(props.onAddAttachment).toHaveBeenCalledWith(
-			'images/draft-1.png',
-			'data:image/png;base64,abc'
-		);
+		expect(props.onAddAttachment).toHaveBeenCalledWith('draft-1.png', 'data:image/png;base64,abc');
 		expect(props.onContentChange).toHaveBeenCalledWith('# Hi\n![draft-1.png](images/draft-1.png)');
 	});
 

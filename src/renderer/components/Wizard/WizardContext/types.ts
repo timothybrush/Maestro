@@ -157,13 +157,13 @@ export interface WizardContextAPI {
 	getPhase1Content: () => string;
 	setAutoRunMode: (mode: WizardAutoRunMode) => void;
 	setWantsTour: (wantsTour: boolean) => void;
-	completeWizard: (sessionId: string | null) => void;
-	saveStateForResume: () => void;
+	completeWizard: (sessionId: string | null) => Promise<void>;
+	saveStateForResume: () => Promise<void>;
 	restoreState: (state: Partial<WizardState>) => void;
 	getSerializableState: () => SerializableWizardState;
 	hasResumeState: () => Promise<boolean>;
 	loadResumeState: () => Promise<SerializableWizardState | null>;
-	clearResumeState: () => void;
+	clearResumeState: () => Promise<void>;
 }
 
 export interface WizardProviderProps {

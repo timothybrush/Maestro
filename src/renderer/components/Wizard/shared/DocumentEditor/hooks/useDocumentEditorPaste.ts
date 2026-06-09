@@ -131,7 +131,7 @@ export function useDocumentEditorPaste({
 				}
 
 				const filename = result.relativePath.split('/').pop() || result.relativePath;
-				onAddAttachment(result.relativePath, base64Data);
+				onAddAttachment(filename, base64Data);
 
 				const textarea = textareaRef.current;
 				if (!textarea) return;
