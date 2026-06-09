@@ -453,7 +453,7 @@ export const MarkdownRenderer = memo(
 											} else if (/^file:\/\//.test(href)) {
 												window.maestro.shell.openPath(href.replace(/^file:\/\//, ''));
 											} else if (/^https?:\/\//.test(href)) {
-												openUrl(href, { ctrlKey: e.ctrlKey });
+												openUrl(href, { ctrlKey: e.metaKey || e.ctrlKey });
 											} else {
 												// Attempt to convert non-standard URLs (e.g. git@host:user/repo)
 												try {
@@ -464,7 +464,7 @@ export const MarkdownRenderer = memo(
 																.replace(/\.git$/, '')
 														: href;
 													if (/^https?:\/\//.test(converted)) {
-														openUrl(converted, { ctrlKey: e.ctrlKey });
+														openUrl(converted, { ctrlKey: e.metaKey || e.ctrlKey });
 													}
 												} catch {
 													// Silently ignore unparseable URLs
