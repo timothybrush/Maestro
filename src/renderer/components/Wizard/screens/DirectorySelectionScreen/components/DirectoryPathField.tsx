@@ -1,5 +1,6 @@
 import { AlertCircle, FileText } from 'lucide-react';
 import type { ChangeEvent, RefObject } from 'react';
+import { useState } from 'react';
 import type { Theme } from '../../../../../types';
 
 interface DirectoryPathFieldProps {
@@ -27,6 +28,8 @@ export function DirectoryPathField({
 	onPathChange,
 	onBrowse,
 }: DirectoryPathFieldProps): JSX.Element {
+	const [isFocused, setIsFocused] = useState(false);
+
 	return (
 		<div className="mb-8">
 			<label
@@ -43,6 +46,8 @@ export function DirectoryPathField({
 					type="text"
 					value={directoryPath}
 					onChange={onPathChange}
+					onFocus={() => setIsFocused(true)}
+					onBlur={() => setIsFocused(false)}
 					placeholder={
 						isRemoteSession
 							? `Enter path on ${sshRemoteHost || 'remote host'} (e.g., /home/user/project)`
@@ -53,14 +58,11 @@ export function DirectoryPathField({
 						backgroundColor: theme.colors.bgMain,
 						borderColor: directoryError
 							? theme.colors.error
-							: document.activeElement === inputRef.current
+							: isFocused
 								? theme.colors.accent
 								: theme.colors.border,
 						color: theme.colors.textMain,
-						boxShadow:
-							document.activeElement === inputRef.current
-								? `0 0 0 2px ${theme.colors.accent}40`
-								: 'none',
+						boxShadow: isFocused ? `0 0 0 2px ${theme.colors.accent}40` : 'none',
 					}}
 					aria-invalid={!!directoryError}
 					aria-describedby={directoryError ? 'directory-error' : undefined}

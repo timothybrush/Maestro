@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 import type { GeneratedDocument } from '../../../WizardContext';
 import { logger } from '../../../../../utils/logger';
+import { captureException } from '../../../../../utils/sentry';
 
 const AUTO_SAVE_DELAY = 2000;
 
@@ -71,6 +72,14 @@ export function usePhaseReviewAutosave({
 					await persistContent(localContent);
 				} catch (err) {
 					logger.error('Auto-save failed:', undefined, err);
+					captureException(err, {
+						extra: {
+							context: 'usePhaseReviewAutosave.autosave',
+							folderPath,
+							filename: currentDoc.filename,
+							currentDocumentIndex,
+						},
+					});
 				} finally {
 					isSavingRef.current = false;
 
@@ -85,6 +94,14 @@ export function usePhaseReviewAutosave({
 							await persistContent(pendingContent);
 						} catch (err) {
 							logger.error('Auto-save (pending) failed:', undefined, err);
+							captureException(err, {
+								extra: {
+									context: 'usePhaseReviewAutosave.pendingAutosave',
+									folderPath,
+									filename: currentDoc.filename,
+									currentDocumentIndex,
+								},
+							});
 						} finally {
 							isSavingRef.current = false;
 						}
@@ -98,7 +115,7 @@ export function usePhaseReviewAutosave({
 				clearTimeout(autoSaveTimeoutRef.current);
 			}
 		};
-	}, [currentDoc, localContent, persistContent]);
+	}, [currentDoc, currentDocumentIndex, folderPath, localContent, persistContent]);
 
 	return {
 		lastSavedContentRef,

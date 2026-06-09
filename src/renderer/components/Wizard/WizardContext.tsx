@@ -8,6 +8,7 @@ import {
 	useMemo,
 } from 'react';
 import type { ToolType, AgentConfig } from '../../types';
+import { captureException } from '../../utils/sentry';
 import { STEP_INDEX, INDEX_TO_STEP, WIZARD_TOTAL_STEPS } from './WizardContext/constants';
 import { generateMessageId } from './WizardContext/messageIds';
 import {
@@ -239,9 +240,15 @@ export function WizardProvider({ children }: WizardProviderProps) {
 	const hasResumeState = useCallback(async (): Promise<boolean> => {
 		try {
 			const saved = await window.maestro.settings.get('wizardResumeState');
-			return hasSavedResumeState(saved);
-		} catch {
-			return false;
+			return hasSavedResumeState(saved) && isResumeStateLoadable(saved);
+		} catch (error) {
+			captureException(error, {
+				extra: {
+					context: 'wizardResumeState read',
+					functionName: 'hasResumeState',
+				},
+			});
+			throw error;
 		}
 	}, []);
 
@@ -249,8 +256,14 @@ export function WizardProvider({ children }: WizardProviderProps) {
 		try {
 			const saved = await window.maestro.settings.get('wizardResumeState');
 			return isResumeStateLoadable(saved) ? saved : null;
-		} catch {
-			return null;
+		} catch (error) {
+			captureException(error, {
+				extra: {
+					context: 'wizardResumeState read',
+					functionName: 'loadResumeState',
+				},
+			});
+			throw error;
 		}
 	}, []);
 

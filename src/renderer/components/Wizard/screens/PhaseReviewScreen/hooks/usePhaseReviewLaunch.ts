@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
 import type { GeneratedDocument, WizardState } from '../../../WizardContext';
+import { captureException, captureMessage } from '../../../../../utils/sentry';
 import type { LaunchingButton } from '../types';
 import { buildWizardCompletionMetrics } from '../utils/documentStats';
 
@@ -60,6 +61,27 @@ export function usePhaseReviewLaunch({
 				const errorMessage = err instanceof Error ? err.message : 'Failed to launch session';
 				setLaunchError(errorMessage);
 				setLaunchingButton(null);
+				if (err instanceof Error) {
+					captureException(err, {
+						extra: {
+							context: 'usePhaseReviewLaunch.handleLaunch',
+							wantsTour,
+							filename: currentDoc?.filename,
+						},
+					});
+					throw err;
+				}
+
+				captureMessage('Phase review launch failed with a non-Error value', {
+					level: 'error',
+					extra: {
+						context: 'usePhaseReviewLaunch.handleLaunch',
+						wantsTour,
+						filename: currentDoc?.filename,
+						error: String(err),
+					},
+				});
+				throw new Error(errorMessage);
 			}
 		},
 		[

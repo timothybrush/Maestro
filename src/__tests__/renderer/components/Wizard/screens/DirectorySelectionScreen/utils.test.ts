@@ -4,6 +4,13 @@ import { getWizardSshRemoteId } from '../../../../../../renderer/components/Wiza
 import { getWizardYoloFlag } from '../../../../../../renderer/components/Wizard/screens/DirectorySelectionScreen/utils/yoloFlag';
 import type { AgentConfig } from '../../../../../../renderer/types';
 
+const sentryMocks = vi.hoisted(() => ({
+	captureException: vi.fn(),
+	captureMessage: vi.fn(),
+}));
+
+vi.mock('../../../../../../renderer/utils/sentry', () => sentryMocks);
+
 describe('DirectorySelectionScreen utils', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
@@ -42,7 +49,7 @@ describe('DirectorySelectionScreen utils', () => {
 		expect(getWizardYoloFlag(null)).toBeNull();
 	});
 
-	it('checks existing Auto Run docs and swallows read failures', async () => {
+	it('checks existing Auto Run docs and swallows recoverable read failures', async () => {
 		vi.mocked(window.maestro.autorun.listDocs).mockResolvedValueOnce({
 			success: true,
 			files: ['a.md', 'b.md'],
@@ -62,5 +69,22 @@ describe('DirectorySelectionScreen utils', () => {
 			exists: false,
 			count: 0,
 		});
+	});
+
+	it('reports and rethrows unexpected Auto Run docs lookup failures', async () => {
+		const error = new Error('network timeout');
+		vi.mocked(window.maestro.autorun.listDocs).mockRejectedValueOnce(error);
+
+		await expect(checkForExistingAutoRunDocs('/project')).rejects.toThrow('network timeout');
+
+		expect(sentryMocks.captureException).toHaveBeenCalledWith(
+			error,
+			expect.objectContaining({
+				extra: expect.objectContaining({
+					context: 'checkForExistingAutoRunDocs',
+					dirPath: '/project',
+				}),
+			})
+		);
 	});
 });

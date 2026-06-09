@@ -8,6 +8,13 @@ import {
 	useDirectoryValidation,
 } from '../../../../../../renderer/components/Wizard/screens/DirectorySelectionScreen/hooks';
 
+const sentryMocks = vi.hoisted(() => ({
+	captureException: vi.fn(),
+	captureMessage: vi.fn(),
+}));
+
+vi.mock('../../../../../../renderer/utils/sentry', () => sentryMocks);
+
 describe('DirectorySelectionScreen hooks', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
@@ -91,6 +98,34 @@ describe('DirectorySelectionScreen hooks', () => {
 		expect(window.maestro.fs.readDir).toHaveBeenCalledWith('/typed', undefined);
 	});
 
+	it('ignores stale directory validation results', async () => {
+		let resolveFirstRead: (value: string[]) => void = () => {};
+		vi.mocked(window.maestro.fs.readDir)
+			.mockImplementationOnce(
+				() =>
+					new Promise<string[]>((resolve) => {
+						resolveFirstRead = resolve;
+					})
+			)
+			.mockResolvedValueOnce([]);
+
+		const { result, params } = renderValidation();
+
+		const firstValidation = result.current.validateDirectory('/old');
+		await act(async () => {
+			await result.current.validateDirectory('/new');
+		});
+
+		await act(async () => {
+			resolveFirstRead([]);
+			await firstValidation;
+		});
+
+		expect(window.maestro.git.isRepo).toHaveBeenCalledTimes(1);
+		expect(params.announce).toHaveBeenCalledTimes(1);
+		expect(params.announce).toHaveBeenCalledWith('Directory validated. Git repository detected.');
+	});
+
 	it('loads SSH remote host labels and resets when remote is disabled', async () => {
 		const { result, rerender } = renderHook(
 			({ enabled }) =>
@@ -105,6 +140,42 @@ describe('DirectorySelectionScreen hooks', () => {
 
 		rerender({ enabled: false });
 		expect(result.current).toBeNull();
+	});
+
+	it('clears SSH remote host labels on lookup misses and reports lookup failures', async () => {
+		vi.mocked(window.maestro.sshRemote.getConfigs).mockResolvedValueOnce({
+			success: true,
+			configs: [],
+		});
+
+		const { result, rerender } = renderHook(
+			({ remoteId }) => useDirectorySshRemoteHost({ enabled: true, remoteId }),
+			{ initialProps: { remoteId: 'missing-remote' } }
+		);
+
+		await act(async () => {
+			await Promise.resolve();
+		});
+		expect(result.current).toBe('');
+		expect(sentryMocks.captureMessage).toHaveBeenCalledWith(
+			'Wizard SSH remote host lookup missed',
+			expect.objectContaining({
+				extra: expect.objectContaining({ remoteId: 'missing-remote' }),
+			})
+		);
+
+		vi.mocked(window.maestro.sshRemote.getConfigs).mockRejectedValueOnce(new Error('ssh down'));
+		rerender({ remoteId: 'remote-error' });
+		await act(async () => {
+			await Promise.resolve();
+		});
+		expect(result.current).toBe('');
+		expect(sentryMocks.captureException).toHaveBeenCalledWith(
+			expect.objectContaining({ message: 'ssh down' }),
+			expect.objectContaining({
+				extra: expect.objectContaining({ remoteId: 'remote-error' }),
+			})
+		);
 	});
 
 	it('handles browse, git init, existing-doc modal decisions, and cancellation', async () => {
@@ -166,6 +237,57 @@ describe('DirectorySelectionScreen hooks', () => {
 		act(() => result.current.handleModalCancel());
 		expect(setDirectoryPath).toHaveBeenCalledWith('');
 		expect(focusInput).toHaveBeenCalled();
+	});
+
+	it('does not advance when existing-doc lookup fails unexpectedly', async () => {
+		const nextStep = vi.fn();
+		const setDirectoryError = vi.fn();
+		vi.mocked(window.maestro.autorun.listDocs).mockResolvedValueOnce({
+			success: false,
+			files: [],
+			error: 'network timeout',
+		});
+
+		const { result } = renderHook(() =>
+			useDirectoryActions({
+				directoryPath: '/project',
+				existingDocsChoice: null,
+				isValidating: false,
+				canProceedToNext: () => true,
+				nextStep,
+				setDirectoryPath: vi.fn(),
+				setIsGitRepo: vi.fn(),
+				setDirectoryError,
+				setHasExistingAutoRunDocs: vi.fn(),
+				setExistingDocsChoice: vi.fn(),
+				setInitRepoError: vi.fn(),
+				getSshRemoteId: () => undefined,
+				validateDirectory: vi.fn().mockResolvedValue(undefined),
+				focusInput: vi.fn(),
+				focusContinue: vi.fn(),
+				announce: vi.fn(),
+			})
+		);
+
+		await act(async () => {
+			await expect(result.current.attemptNextStep()).rejects.toThrow(
+				'Auto Run docs lookup failed: network timeout'
+			);
+		});
+
+		expect(nextStep).not.toHaveBeenCalled();
+		expect(setDirectoryError).toHaveBeenCalledWith(
+			'Unable to check existing Auto Run docs. Please try again.'
+		);
+		expect(sentryMocks.captureException).toHaveBeenCalledWith(
+			expect.objectContaining({ message: 'Auto Run docs lookup failed: network timeout' }),
+			expect.objectContaining({
+				extra: expect.objectContaining({
+					context: 'useDirectoryActions.attemptNextStep',
+					directoryPath: '/project',
+				}),
+			})
+		);
 	});
 
 	it('handles Enter and Escape keyboard routing', () => {

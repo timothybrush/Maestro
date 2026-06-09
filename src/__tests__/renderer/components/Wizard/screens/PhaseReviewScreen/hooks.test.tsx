@@ -8,6 +8,13 @@ import {
 	usePhaseReviewLaunch,
 } from '../../../../../../renderer/components/Wizard/screens/PhaseReviewScreen/hooks';
 
+const sentryMocks = vi.hoisted(() => ({
+	captureException: vi.fn(),
+	captureMessage: vi.fn(),
+}));
+
+vi.mock('../../../../../../renderer/utils/sentry', () => sentryMocks);
+
 describe('PhaseReviewScreen hooks', () => {
 	beforeEach(() => {
 		vi.useFakeTimers();
@@ -140,9 +147,18 @@ describe('PhaseReviewScreen hooks', () => {
 		);
 
 		await act(async () => {
-			await launch.current.handleLaunch(false);
+			await expect(launch.current.handleLaunch(false)).rejects.toThrow('no launch');
 		});
 		expect(launch.current.launchError).toBe('no launch');
+		expect(sentryMocks.captureException).toHaveBeenCalledWith(
+			expect.objectContaining({ message: 'no launch' }),
+			expect.objectContaining({
+				extra: expect.objectContaining({
+					context: 'usePhaseReviewLaunch.handleLaunch',
+					wantsTour: false,
+				}),
+			})
+		);
 
 		const handleModeChange = vi.fn();
 		const handleDocumentSelect = vi.fn();
@@ -180,12 +196,20 @@ describe('PhaseReviewScreen hooks', () => {
 		document.body.appendChild(readyButtonRef.current);
 		document.body.appendChild(tourButtonRef.current);
 		readyButtonRef.current.focus();
+		const enterPreventDefault = vi.fn();
+		const enterStopPropagation = vi.fn();
 		act(() => {
 			keyboard.current({ key: 'Tab', shiftKey: false, preventDefault: vi.fn() } as any);
-			keyboard.current({ key: 'Enter', preventDefault: vi.fn() } as any);
+			keyboard.current({
+				key: 'Enter',
+				preventDefault: enterPreventDefault,
+				stopPropagation: enterStopPropagation,
+			} as any);
 		});
 		expect(tourButtonRef.current).toHaveFocus();
 		expect(handleLaunch).toHaveBeenCalledWith(true);
+		expect(enterPreventDefault).toHaveBeenCalled();
+		expect(enterStopPropagation).toHaveBeenCalled();
 		document.body.removeChild(readyButtonRef.current);
 		document.body.removeChild(tourButtonRef.current);
 	});

@@ -4,6 +4,7 @@ import { deriveSshRemoteId, phaseGenerator } from '../../../services/phaseGenera
 import type { CreatedFileInfo } from '../types';
 import { upsertCreatedFile } from '../utils/createdFiles';
 import { logger } from '../../../../../utils/logger';
+import { captureException, captureMessage } from '../../../../../utils/sentry';
 
 interface UsePreparingPlanGenerationParams {
 	state: WizardState;
@@ -143,6 +144,27 @@ export function usePreparingPlanGeneration({
 			const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
 			setGenerationError(errorMessage);
 			setGeneratingDocuments(false);
+			if (error instanceof Error) {
+				captureException(error, {
+					extra: {
+						context: 'usePreparingPlanGeneration.startGeneration',
+						agentType: state.selectedAgent,
+						directoryPath: state.directoryPath,
+					},
+				});
+				throw error;
+			}
+
+			captureMessage('Preparing plan generation failed with a non-Error value', {
+				level: 'error',
+				extra: {
+					context: 'usePreparingPlanGeneration.startGeneration',
+					agentType: state.selectedAgent,
+					directoryPath: state.directoryPath,
+					error: String(error),
+				},
+			});
+			throw new Error(errorMessage);
 		}
 	}, [
 		addCreatedFile,

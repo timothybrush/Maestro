@@ -38,10 +38,10 @@ export function useMarkdownPreview({
 	}, [folderPath, theme]);
 
 	const mermaidRenderer = useMemo(() => {
-		return function Mermaid({ code }: { code: string; theme: Theme }) {
+		return function Mermaid({ code }: { code: string }) {
 			return <MermaidRenderer chart={code} theme={theme} />;
 		};
-	}, []);
+	}, [theme]);
 
 	const markdownComponents = useMemo(
 		() =>

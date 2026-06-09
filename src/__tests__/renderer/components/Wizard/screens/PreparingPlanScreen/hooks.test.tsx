@@ -3,12 +3,19 @@ import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { initialState } from '../../../../../../renderer/components/Wizard/WizardContext/reducer';
 import { usePreparingPlanGeneration } from '../../../../../../renderer/components/Wizard/screens/PreparingPlanScreen/hooks';
 
+const sentryMocks = vi.hoisted(() => ({
+	captureException: vi.fn(),
+	captureMessage: vi.fn(),
+}));
+
 const phaseGeneratorMock = vi.hoisted(() => ({
 	generateDocuments: vi.fn(),
 	saveDocuments: vi.fn(),
 	isGenerationInProgress: vi.fn(),
 	abort: vi.fn(),
 }));
+
+vi.mock('../../../../../../renderer/utils/sentry', () => sentryMocks);
 
 vi.mock('../../../../../../renderer/components/Wizard/services/phaseGenerator', () => ({
 	phaseGenerator: phaseGeneratorMock,

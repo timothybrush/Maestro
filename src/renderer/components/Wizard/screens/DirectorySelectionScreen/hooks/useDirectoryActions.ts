@@ -2,6 +2,8 @@ import { useCallback, useState } from 'react';
 import { PLAYBOOKS_DIR } from '../../../../../../shared/maestro-paths';
 import { gitService } from '../../../../../services/git';
 import { logger } from '../../../../../utils/logger';
+import { captureException } from '../../../../../utils/sentry';
+import { isRecoverableAutoRunDocsError } from '../utils/existingDocs';
 
 interface UseDirectoryActionsParams {
 	directoryPath: string;
@@ -88,18 +90,55 @@ export function useDirectoryActions({
 			return;
 		}
 
-		try {
-			const autoRunPath = `${directoryPath}/${PLAYBOOKS_DIR}`;
-			const result = await window.maestro.autorun.listDocs(autoRunPath, getSshRemoteId());
-			const docs = result.success ? result.files : [];
+		const autoRunPath = `${directoryPath}/${PLAYBOOKS_DIR}`;
+		const sshRemoteId = getSshRemoteId();
+		let result: Awaited<ReturnType<typeof window.maestro.autorun.listDocs>>;
 
-			if (docs && docs.length > 0) {
-				setHasExistingAutoRunDocs(true, docs.length);
-				setShowExistingDocsModal(true);
+		try {
+			result = await window.maestro.autorun.listDocs(autoRunPath, sshRemoteId);
+		} catch (error) {
+			if (isRecoverableAutoRunDocsError(error)) {
+				nextStep();
 				return;
 			}
-		} catch {
-			// Missing or unreadable Auto Run docs are fine here.
+
+			setDirectoryError('Unable to check existing Auto Run docs. Please try again.');
+			captureException(error, {
+				extra: {
+					context: 'useDirectoryActions.attemptNextStep',
+					directoryPath,
+					autoRunPath,
+					sshRemoteId,
+				},
+			});
+			throw error;
+		}
+
+		if (!result.success) {
+			if (isRecoverableAutoRunDocsError(result.error)) {
+				nextStep();
+				return;
+			}
+
+			const error = new Error(`Auto Run docs lookup failed: ${result.error || 'unknown error'}`);
+			setDirectoryError('Unable to check existing Auto Run docs. Please try again.');
+			captureException(error, {
+				extra: {
+					context: 'useDirectoryActions.attemptNextStep',
+					directoryPath,
+					autoRunPath,
+					sshRemoteId,
+					listDocsError: result.error,
+				},
+			});
+			throw error;
+		}
+
+		const docs = result.files;
+		if (docs && docs.length > 0) {
+			setHasExistingAutoRunDocs(true, docs.length);
+			setShowExistingDocsModal(true);
+			return;
 		}
 
 		nextStep();
@@ -109,6 +148,7 @@ export function useDirectoryActions({
 		existingDocsChoice,
 		getSshRemoteId,
 		nextStep,
+		setDirectoryError,
 		setHasExistingAutoRunDocs,
 	]);
 

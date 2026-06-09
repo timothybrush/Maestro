@@ -1,12 +1,18 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Spinner } from '../../../../ui/Spinner';
 import type { Theme } from '../../../../../types';
+import { captureException } from '../../../../../utils/sentry';
 
 interface MarkdownImageProps {
 	src?: string;
 	alt?: string;
 	folderPath?: string;
 	theme: Theme;
+}
+
+function isExpectedImageLoadError(err: unknown): boolean {
+	const message = err instanceof Error ? err.message : String(err ?? '');
+	return /enoent|not found|no such file|missing|invalid image/i.test(message);
 }
 
 export function MarkdownImage({
@@ -18,18 +24,32 @@ export function MarkdownImage({
 	const [dataUrl, setDataUrl] = useState<string | null>(null);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
+	const requestIdRef = useRef(0);
 
 	useEffect(() => {
+		const requestId = ++requestIdRef.current;
+		const isCurrentRequest = () => requestIdRef.current === requestId;
+
+		setDataUrl(null);
+		setError(null);
+
 		if (!src) {
 			setLoading(false);
-			return;
+			return () => {
+				if (requestIdRef.current === requestId) {
+					requestIdRef.current += 1;
+				}
+			};
 		}
 
 		if (src.startsWith('images/') && folderPath) {
+			setLoading(true);
 			const absolutePath = `${folderPath}/${src}`;
 			window.maestro.fs
 				.readFile(absolutePath)
 				.then((result) => {
+					if (!isCurrentRequest()) return;
+
 					if (result && result.startsWith('data:')) {
 						setDataUrl(result);
 					} else {
@@ -37,9 +57,23 @@ export function MarkdownImage({
 					}
 					setLoading(false);
 				})
-				.catch((err: Error) => {
-					setError(`Failed to load: ${err.message}`);
+				.catch((err: unknown) => {
+					if (!isCurrentRequest()) return;
+
+					const error = err instanceof Error ? err : new Error(String(err));
+					setError(`Failed to load: ${error.message}`);
 					setLoading(false);
+					if (!isExpectedImageLoadError(error)) {
+						captureException(error, {
+							extra: {
+								context: 'MarkdownImage.readFile',
+								src,
+								folderPath,
+								absolutePath,
+							},
+						});
+						throw error;
+					}
 				});
 		} else if (src.startsWith('data:') || src.startsWith('http')) {
 			setDataUrl(src);
@@ -47,6 +81,12 @@ export function MarkdownImage({
 		} else {
 			setLoading(false);
 		}
+
+		return () => {
+			if (requestIdRef.current === requestId) {
+				requestIdRef.current += 1;
+			}
+		};
 	}, [src, folderPath]);
 
 	if (loading) {

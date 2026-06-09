@@ -1,8 +1,15 @@
 import React from 'react';
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { DocumentEditor } from '../../../../../renderer/components/Wizard/shared/DocumentEditor';
 import { useSettingsStore } from '../../../../../renderer/stores/settingsStore';
+
+const sentryMocks = vi.hoisted(() => ({
+	captureException: vi.fn(),
+	captureMessage: vi.fn(),
+}));
+
+vi.mock('../../../../../renderer/utils/sentry', () => sentryMocks);
 
 vi.mock('../../../../../renderer/components/Wizard/shared/DocumentSelector', () => ({
 	DocumentSelector: ({ selectedIndex }: { selectedIndex: number }) => (
@@ -222,5 +229,103 @@ describe('DocumentEditor', () => {
 			'data:image/png;base64,abc'
 		);
 		expect(props.onContentChange).toHaveBeenCalledWith('# Hi\n![draft-1.png](images/draft-1.png)');
+	});
+
+	it('reports pasted image save failures without changing editor content', async () => {
+		class MockFileReader {
+			onload: ((event: { target: { result: string } }) => void) | null = null;
+			onerror: (() => void) | null = null;
+
+			readAsDataURL() {
+				this.onload?.({ target: { result: 'data:image/png;base64,abc' } });
+			}
+		}
+
+		vi.stubGlobal('FileReader', MockFileReader);
+		vi.mocked(window.maestro.autorun.saveImage).mockResolvedValueOnce({
+			success: false,
+			error: 'disk full',
+		});
+
+		const props = createProps({ mode: 'edit', content: '# Hi' });
+		render(<DocumentEditor {...props} />);
+		const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
+		textarea.setSelectionRange(4, 4);
+
+		fireEvent.paste(textarea, {
+			clipboardData: {
+				items: [
+					{
+						type: 'image/png',
+						getAsFile: () => new File(['image'], 'clip.png', { type: 'image/png' }),
+					},
+				],
+				getData: () => '',
+			},
+		});
+
+		await waitFor(() => {
+			expect(sentryMocks.captureMessage).toHaveBeenCalledWith(
+				'Pasted image save failed',
+				expect.objectContaining({
+					extra: expect.objectContaining({ selectedFile: 'draft', error: 'disk full' }),
+				})
+			);
+		});
+		expect(sentryMocks.captureException).toHaveBeenCalledWith(
+			expect.objectContaining({ message: 'disk full' }),
+			expect.any(Object)
+		);
+		expect(props.onAddAttachment).not.toHaveBeenCalled();
+		expect(props.onContentChange).not.toHaveBeenCalled();
+	});
+
+	it('inserts pasted image markdown into the latest textarea value after async save', async () => {
+		class MockFileReader {
+			onload: ((event: { target: { result: string } }) => void) | null = null;
+
+			readAsDataURL() {
+				this.onload?.({ target: { result: 'data:image/png;base64,abc' } });
+			}
+		}
+
+		let resolveSave: (
+			value: Awaited<ReturnType<typeof window.maestro.autorun.saveImage>>
+		) => void = () => {};
+		vi.stubGlobal('FileReader', MockFileReader);
+		vi.mocked(window.maestro.autorun.saveImage).mockReturnValueOnce(
+			new Promise((resolve) => {
+				resolveSave = resolve;
+			})
+		);
+
+		const props = createProps({ mode: 'edit', content: '# Hi' });
+		render(<DocumentEditor {...props} />);
+		const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
+		textarea.setSelectionRange(4, 4);
+
+		fireEvent.paste(textarea, {
+			clipboardData: {
+				items: [
+					{
+						type: 'image/png',
+						getAsFile: () => new File(['image'], 'clip.png', { type: 'image/png' }),
+					},
+				],
+				getData: () => '',
+			},
+		});
+
+		textarea.value = '# Hi\nStill typing';
+
+		await act(async () => {
+			resolveSave({ success: true, relativePath: 'images/draft-1.png' });
+		});
+
+		await waitFor(() => {
+			expect(props.onContentChange).toHaveBeenCalledWith(
+				'# Hi\n![draft-1.png](images/draft-1.png)\nStill typing'
+			);
+		});
 	});
 });

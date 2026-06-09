@@ -78,8 +78,12 @@ export function usePhaseReviewKeyboard({
 			if (e.key === 'Enter' && !launchingButton) {
 				const focusedElement = document.activeElement;
 				if (focusedElement === readyButtonRef.current) {
+					e.preventDefault();
+					e.stopPropagation();
 					handleLaunch(false);
 				} else if (focusedElement === tourButtonRef.current) {
+					e.preventDefault();
+					e.stopPropagation();
 					handleLaunch(true);
 				}
 			}

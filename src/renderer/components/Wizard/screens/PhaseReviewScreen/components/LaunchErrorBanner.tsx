@@ -34,6 +34,7 @@ export function LaunchErrorBanner({
 			</span>
 			<button
 				onClick={onDismiss}
+				aria-label="Dismiss launch error"
 				className="ml-auto p-1 hover:opacity-80 focus:outline-none focus:ring-2 focus:ring-offset-1 rounded"
 				style={{
 					color: theme.colors.error,

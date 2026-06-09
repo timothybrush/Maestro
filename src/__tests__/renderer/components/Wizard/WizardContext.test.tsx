@@ -23,6 +23,13 @@ import {
 } from '../../../../renderer/components/Wizard/WizardContext';
 import type { AgentConfig, ToolType } from '../../../../renderer/types';
 
+const sentryMocks = vi.hoisted(() => ({
+	captureException: vi.fn(),
+	captureMessage: vi.fn(),
+}));
+
+vi.mock('../../../../renderer/utils/sentry', () => sentryMocks);
+
 beforeEach(() => {
 	// Reset all mocks
 	vi.clearAllMocks();
@@ -1346,8 +1353,10 @@ describe('WizardContext', () => {
 				expect(hasState!).toBe(false);
 			});
 
-			it('returns false on error', async () => {
-				vi.mocked(window.maestro.settings.get).mockRejectedValue(new Error('Storage error'));
+			it('returns false when resume state is not loadable', async () => {
+				vi.mocked(window.maestro.settings.get).mockResolvedValue({
+					currentStep: 'agent-selection',
+				});
 
 				const { result } = renderHook(() => useWizard(), { wrapper });
 
@@ -1357,6 +1366,27 @@ describe('WizardContext', () => {
 				});
 
 				expect(hasState!).toBe(false);
+			});
+
+			it('reports and rethrows settings read errors', async () => {
+				const error = new Error('Storage error');
+				vi.mocked(window.maestro.settings.get).mockRejectedValue(error);
+
+				const { result } = renderHook(() => useWizard(), { wrapper });
+
+				await act(async () => {
+					await expect(result.current.hasResumeState()).rejects.toThrow('Storage error');
+				});
+
+				expect(sentryMocks.captureException).toHaveBeenCalledWith(
+					error,
+					expect.objectContaining({
+						extra: expect.objectContaining({
+							context: 'wizardResumeState read',
+							functionName: 'hasResumeState',
+						}),
+					})
+				);
 			});
 		});
 
@@ -1418,17 +1448,25 @@ describe('WizardContext', () => {
 				expect(loaded).toBeNull();
 			});
 
-			it('returns null on error', async () => {
-				vi.mocked(window.maestro.settings.get).mockRejectedValue(new Error('Storage error'));
+			it('reports and rethrows settings read errors', async () => {
+				const error = new Error('Storage error');
+				vi.mocked(window.maestro.settings.get).mockRejectedValue(error);
 
 				const { result } = renderHook(() => useWizard(), { wrapper });
 
-				let loaded: SerializableWizardState | null;
 				await act(async () => {
-					loaded = await result.current.loadResumeState();
+					await expect(result.current.loadResumeState()).rejects.toThrow('Storage error');
 				});
 
-				expect(loaded).toBeNull();
+				expect(sentryMocks.captureException).toHaveBeenCalledWith(
+					error,
+					expect.objectContaining({
+						extra: expect.objectContaining({
+							context: 'wizardResumeState read',
+							functionName: 'loadResumeState',
+						}),
+					})
+				);
 			});
 		});
 

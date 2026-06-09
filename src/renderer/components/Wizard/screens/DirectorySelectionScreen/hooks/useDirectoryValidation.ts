@@ -27,6 +27,7 @@ export function useDirectoryValidation({
 }: UseDirectoryValidationParams) {
 	const [isValidating, setIsValidating] = useState(false);
 	const validationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+	const validationRequestIdRef = useRef(0);
 
 	const getSshRemoteId = useCallback(
 		() => getWizardSshRemoteId(sessionSshRemoteConfig),
@@ -39,10 +40,14 @@ export function useDirectoryValidation({
 			shouldAnnounce: boolean = true,
 			skipExistingDocsCheck: boolean = false
 		) => {
+			const requestId = ++validationRequestIdRef.current;
+			const isCurrentRequest = () => validationRequestIdRef.current === requestId;
+
 			if (!path.trim()) {
 				setDirectoryError(null);
 				setIsGitRepo(false);
 				setHasExistingAutoRunDocs(false, 0);
+				setIsValidating(false);
 				return;
 			}
 
@@ -54,6 +59,7 @@ export function useDirectoryValidation({
 				try {
 					await window.maestro.fs.readDir(path, sshRemoteId);
 				} catch (dirError) {
+					if (!isCurrentRequest()) return;
 					logger.error('Directory does not exist:', undefined, dirError);
 					setDirectoryError('Directory not found. Please check the path exists.');
 					setIsGitRepo(false);
@@ -62,16 +68,18 @@ export function useDirectoryValidation({
 					if (shouldAnnounce) {
 						announce('Error: Directory not found. Please check the path exists.');
 					}
-					setIsValidating(false);
 					return;
 				}
+				if (!isCurrentRequest()) return;
 
 				const isRepo = await window.maestro.git.isRepo(path, sshRemoteId);
+				if (!isCurrentRequest()) return;
 				setIsGitRepo(isRepo);
 				setDirectoryError(null);
 
 				if (!skipExistingDocsCheck && !existingDocsChoice) {
 					const existingDocs = await checkForExistingAutoRunDocs(path, sshRemoteId);
+					if (!isCurrentRequest()) return;
 					setHasExistingAutoRunDocs(existingDocs.exists, existingDocs.count);
 				}
 
@@ -83,6 +91,7 @@ export function useDirectoryValidation({
 					);
 				}
 			} catch (error) {
+				if (!isCurrentRequest()) return;
 				logger.error('Directory validation error:', undefined, error);
 				setDirectoryError('Unable to access this directory. Please check the path exists.');
 				setIsGitRepo(false);
@@ -91,9 +100,11 @@ export function useDirectoryValidation({
 				if (shouldAnnounce) {
 					announce('Error: Unable to access this directory. Please check the path exists.');
 				}
+			} finally {
+				if (isCurrentRequest()) {
+					setIsValidating(false);
+				}
 			}
-
-			setIsValidating(false);
 		},
 		[
 			announce,
@@ -108,6 +119,7 @@ export function useDirectoryValidation({
 	const handlePathChange = useCallback(
 		(e: ChangeEvent<HTMLInputElement>) => {
 			const newPath = e.target.value;
+			validationRequestIdRef.current += 1;
 			setDirectoryPath(newPath);
 
 			if (validationTimeoutRef.current) {
@@ -141,6 +153,7 @@ export function useDirectoryValidation({
 
 	useEffect(() => {
 		return () => {
+			validationRequestIdRef.current += 1;
 			if (validationTimeoutRef.current) {
 				clearTimeout(validationTimeoutRef.current);
 			}

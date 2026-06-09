@@ -1,5 +1,6 @@
 import { useCallback } from 'react';
 import type { ClipboardEvent, RefObject } from 'react';
+import { captureException, captureMessage } from '../../../../../utils/sentry';
 import { buildImageInsertion, insertTextAtSelection } from '../utils/editorCommands';
 
 interface UseDocumentEditorPasteArgs {
@@ -62,31 +63,84 @@ export function useDocumentEditorPaste({
 			const file = imageItem.getAsFile();
 			if (!file) return;
 
+			const textareaAtPaste = textareaRef.current;
+			if (!textareaAtPaste) return;
+			const insertionStart = textareaAtPaste.selectionStart ?? content.length;
+
 			const reader = new FileReader();
+			reader.onerror = () => {
+				captureException(reader.error ?? new Error('Failed to read pasted image'), {
+					extra: {
+						context: 'useDocumentEditorPaste.reader.onerror',
+						folderPath,
+						selectedFile,
+						imageType: imageItem.type,
+					},
+				});
+			};
+
 			reader.onload = async (readerEvent) => {
 				const base64Data = readerEvent.target?.result as string;
 				if (!base64Data) return;
 
 				const base64Content = base64Data.replace(/^data:image\/\w+;base64,/, '');
 				const extension = imageItem.type.split('/')[1] || 'png';
-				const result = await window.maestro.autorun.saveImage(
-					folderPath,
-					selectedFile,
-					base64Content,
-					extension
-				);
+				let result: Awaited<ReturnType<typeof window.maestro.autorun.saveImage>>;
+				try {
+					result = await window.maestro.autorun.saveImage(
+						folderPath,
+						selectedFile,
+						base64Content,
+						extension
+					);
+				} catch (error) {
+					captureException(error, {
+						extra: {
+							context: 'useDocumentEditorPaste.saveImage',
+							folderPath,
+							selectedFile,
+							imageType: imageItem.type,
+						},
+					});
+					return;
+				}
 
-				if (!result.success || !result.relativePath) return;
+				if (!result.success || !result.relativePath) {
+					const message = 'Pasted image save failed';
+					const error = new Error(result.error || message);
+					captureMessage(message, {
+						level: 'error',
+						extra: {
+							context: 'useDocumentEditorPaste.saveImage.result',
+							folderPath,
+							selectedFile,
+							imageType: imageItem.type,
+							error: result.error,
+							hasRelativePath: !!result.relativePath,
+						},
+					});
+					captureException(error, {
+						extra: {
+							context: 'useDocumentEditorPaste.saveImage.result',
+							folderPath,
+							selectedFile,
+							imageType: imageItem.type,
+						},
+					});
+					return;
+				}
 
 				const filename = result.relativePath.split('/').pop() || result.relativePath;
 				onAddAttachment(result.relativePath, base64Data);
 
 				const textarea = textareaRef.current;
 				if (!textarea) return;
+				const latestContent = textarea.value ?? content;
+				const currentInsertionStart = Math.min(insertionStart, latestContent.length);
 
 				const insertion = buildImageInsertion(
-					content,
-					textarea.selectionStart,
+					latestContent,
+					currentInsertionStart,
 					filename,
 					result.relativePath
 				);

@@ -48,6 +48,8 @@ describe('WizardContext persistence helpers', () => {
 
 		expect(isResumeStateLoadable({ currentStep: 'conversation' })).toBe(true);
 		expect(isResumeStateLoadable({ currentStep: 'agent-selection' })).toBe(false);
+		expect(isResumeStateLoadable({ currentStep: 'unknown-step' })).toBe(false);
+		expect(isResumeStateLoadable({ currentStep: 3 })).toBe(false);
 		expect(isResumeStateLoadable({})).toBe(false);
 	});
 });

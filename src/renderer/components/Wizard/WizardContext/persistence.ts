@@ -1,4 +1,7 @@
+import { STEP_INDEX } from './constants';
 import type { SerializableWizardState, WizardState } from './types';
+
+const CANONICAL_WIZARD_STEPS = Object.keys(STEP_INDEX);
 
 export function buildSerializableWizardState(state: WizardState): SerializableWizardState {
 	return {
@@ -21,7 +24,10 @@ export function buildSerializableWizardState(state: WizardState): SerializableWi
 export function isResumeStateLoadable(saved: unknown): saved is SerializableWizardState {
 	if (!saved || typeof saved !== 'object') return false;
 	const state = saved as Partial<SerializableWizardState>;
-	return !!state.currentStep && state.currentStep !== 'agent-selection';
+	if (typeof state.currentStep !== 'string') return false;
+	return (
+		CANONICAL_WIZARD_STEPS.includes(state.currentStep) && state.currentStep !== 'agent-selection'
+	);
 }
 
 export function hasSavedResumeState(saved: unknown): boolean {
