@@ -29,7 +29,7 @@ const FALLBACK_LANG = 'text';
 // `detectLanguage` from churning (and flickering the picker) while tokens
 // stream in, while still resolving untagged fences shortly after they stop
 // growing. Highlighting itself is NOT debounced - it tracks `code` live.
-const DETECTION_DEBOUNCE_MS = 150;
+export const DETECTION_DEBOUNCE_MS = 150;
 
 function isExplicitLang(lang: string): boolean {
 	return Boolean(lang) && lang !== FALLBACK_LANG;

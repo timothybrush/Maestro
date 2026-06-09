@@ -1,8 +1,17 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
-import { CodeFence } from '../../../renderer/components/CodeFence/CodeFence';
+import { CodeFence, DETECTION_DEBOUNCE_MS } from '../../../renderer/components/CodeFence/CodeFence';
 import { mockTheme } from '../../helpers/mockTheme';
+
+// Drains the microtask queue so promise continuations chained inside the
+// detection effect (resolveLanguage, detectLanguage) settle while fake timers
+// are active. A couple of turns covers the awaits in the detection chain.
+async function flushMicrotasks(): Promise<void> {
+	for (let i = 0; i < 5; i++) {
+		await Promise.resolve();
+	}
+}
 
 // Mock Shiki so CodeFence's async highlighting doesn't hit the real library.
 // The highlight effect is exercised indirectly; we only assert on the resolved
@@ -87,38 +96,57 @@ describe('CodeFence', () => {
 	});
 
 	it('keeps a manually picked language after subsequent streaming code updates', async () => {
-		// Untagged fence: detection would normally drive the language. Detection
-		// stays unconfident here so the only thing that changes the language is
-		// the user's pick.
-		mockHighlightAuto.mockReturnValue({ language: null, relevance: 0 });
-		const { rerender } = render(<CodeFence {...defaultProps} language="" code="const a = 1;" />);
+		// Fake timers let us deterministically flush the detection debounce
+		// (DETECTION_DEBOUNCE_MS = 150ms) plus the async detectLanguage chain,
+		// instead of sleeping a fixed wall-clock duration. A real-time sleep can
+		// pass vacuously on a loaded runner (if the process is suspended, the
+		// stray detection that should clobber the manual pick may never actually
+		// fire), which silently weakens this negative-assertion regression gate.
+		vi.useFakeTimers();
+		try {
+			// Untagged fence: detection would normally drive the language.
+			// Detection stays unconfident here so the only thing that changes the
+			// language is the user's pick.
+			mockHighlightAuto.mockReturnValue({ language: null, relevance: 0 });
+			const { rerender } = render(<CodeFence {...defaultProps} language="" code="const a = 1;" />);
 
-		// Bare fence with no detection resolves to the plain-text fallback first.
-		await waitFor(() => {
+			// Bare fence with no detection: flush the debounce + async detection so
+			// it resolves to the plain-text fallback before the user picks.
+			await act(async () => {
+				vi.advanceTimersByTime(DETECTION_DEBOUNCE_MS + 10);
+				await flushMicrotasks();
+			});
 			expect(langOf()).toBe('text');
-		});
 
-		// User picks a language via the picker (stub fires onChange('rust')).
-		fireEvent.click(screen.getByTestId('lang-picker'));
-		await waitFor(() => {
+			// User picks a language via the picker (stub fires onChange('rust')).
+			act(() => {
+				fireEvent.click(screen.getByTestId('lang-picker'));
+			});
 			expect(langOf()).toBe('rust');
-		});
 
-		// Simulate streaming: more code keeps arriving. Even if detection would
-		// now guess something, the manual override must win.
-		mockHighlightAuto.mockReturnValue({ language: 'javascript', relevance: 50 });
-		rerender(<CodeFence {...defaultProps} language="" code="const a = 1; const b = 2;" />);
-		rerender(
-			<CodeFence {...defaultProps} language="" code="const a = 1; const b = 2; const c = 3;" />
-		);
+			// Simulate streaming: more code keeps arriving, and detection would now
+			// confidently guess a DIFFERENT language (javascript). If the override
+			// guard regressed, a stray detection here would clobber the pick back
+			// to javascript - so the assertion below would fail.
+			mockHighlightAuto.mockReturnValue({ language: 'javascript', relevance: 50 });
+			rerender(<CodeFence {...defaultProps} language="" code="const a = 1; const b = 2;" />);
+			rerender(
+				<CodeFence {...defaultProps} language="" code="const a = 1; const b = 2; const c = 3;" />
+			);
 
-		// Give any pending detection/effects a chance to run and (wrongly)
-		// overwrite the choice. The override ref must hold.
-		await new Promise((resolve) => setTimeout(resolve, 250));
-		await waitFor(() => {
+			// Deterministically give the debounce + any pending detection a real
+			// chance to run and (wrongly) overwrite the choice. Advancing past the
+			// debounce window and flushing microtasks guarantees the detection path
+			// had its full opportunity to fire; the override ref must still hold.
+			await act(async () => {
+				vi.advanceTimersByTime(DETECTION_DEBOUNCE_MS + 10);
+				await flushMicrotasks();
+			});
+
 			expect(langOf()).toBe('rust');
-		});
-		expect(langOf()).toBe('rust');
+		} finally {
+			vi.useRealTimers();
+		}
 	});
 
 	it('debounces detection so streaming does not thrash the resolved language', async () => {
