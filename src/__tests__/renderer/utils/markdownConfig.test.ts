@@ -860,7 +860,7 @@ describe('createMarkdownComponents link handling', () => {
 });
 
 // ---------------------------------------------------------------------------
-// createWizardBubbleMarkdownComponents — link handling (#1060)
+// createWizardBubbleMarkdownComponents - link handling (#1060)
 // ---------------------------------------------------------------------------
 
 describe('createWizardBubbleMarkdownComponents link handling', () => {
@@ -892,7 +892,7 @@ describe('createWizardBubbleMarkdownComponents link handling', () => {
 });
 
 // ---------------------------------------------------------------------------
-// createReleaseNotesMarkdownComponents — link handling (#1060)
+// createReleaseNotesMarkdownComponents - link handling (#1060)
 // ---------------------------------------------------------------------------
 
 describe('createReleaseNotesMarkdownComponents link handling', () => {
