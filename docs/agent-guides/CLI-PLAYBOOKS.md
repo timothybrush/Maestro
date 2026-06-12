@@ -47,6 +47,7 @@ src/cli/
 │   ├── agent-spawner.ts     # Spawn agent CLIs
 │   ├── batch-processor.ts   # Playbook execution engine
 │   ├── maestro-client.ts    # IPC client to running Maestro desktop app
+│   ├── session-command.ts   # Shared helpers for desktop-driving commands (see below)
 │   ├── playbooks.ts         # Playbook file management
 │   └── storage.ts           # Electron Store file reader + SSH remote helpers
 └── output/                 # Output formatting
@@ -55,6 +56,15 @@ src/cli/
 ```
 
 Note: `run-playbook.ts` is the file name, but the command is registered under the `playbook` verb (see entry point). Additional commands (`auto-run`, `open-file`, `refresh-*`, `settings-*`, `status`) are lightweight wrappers over `maestro-client.ts` for talking to a running desktop app.
+
+**Adding a desktop-driving command? Reuse `services/session-command.ts` first.** Most commands that mutate a running app follow one shape: resolve an agent, send a single `{ type, sessionId, ... }` WS message, expect a `{ success, error? }` reply, then report it (JSON or human-readable) and exit non-zero on failure. `session-command.ts` centralizes that:
+
+- `runAgentCommand(agentId, options, build)` - the one-liner path: resolves the agent (partial IDs), sends the message `build()` describes, reports the result. Used by `rename-agent`, `auto-run-control` (stop/resume/skip/abort/reset), `remove-playbook`, `agent-control` (focus/switch-mode).
+- `sendSimpleCommand(payload, responseType)` + `reportResult(result, opts)` + `failCommand(msg, json)` - the building blocks, for commands that don't key off an agent ID (e.g. `rename-group` uses `resolveGroupId`; `set-theme`/`encore` send `set_setting`).
+- `resolveAgentOrFail(agentId, json)` - resolve-or-exit helper.
+- `resolveTabOwner(tabId)` - resolve the agent that owns a desktop tab (exact ID or unique prefix) via `list_desktop_sessions`; used by the `tab` verbs so the user only supplies a tab ID.
+
+Do NOT re-implement the withMaestroClient + sendCommand + JSON/text + `process.exit(1)` boilerplate in a new command file; extend `session-command.ts` if your case needs a new shape.
 
 ### Shared Code with Desktop
 

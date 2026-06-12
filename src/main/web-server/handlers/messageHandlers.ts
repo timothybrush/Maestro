@@ -2735,6 +2735,7 @@ export class WebSocketMessageHandler {
 		'colorBlindMode',
 		'conductorProfile',
 		'maxOutputLines',
+		'encoreFeatures',
 	]);
 
 	/**
