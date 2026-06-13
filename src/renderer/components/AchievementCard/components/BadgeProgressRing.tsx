@@ -32,13 +32,7 @@ export function BadgeProgressRing({ currentLevel, size, theme }: BadgeProgressRi
 	};
 
 	return (
-		<svg
-			width={size}
-			height={size}
-			viewBox={`0 0 ${size} ${size}`}
-			className="absolute inset-0"
-			style={{ transform: 'rotate(0deg)' }}
-		>
+		<svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="absolute inset-0">
 			{Array.from({ length: BADGE_TOTAL_LEVELS }, (_, i) => {
 				const level = i + 1;
 				const isUnlocked = level <= currentLevel;

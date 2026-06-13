@@ -6,6 +6,7 @@ import {
 	BadgeHistoryTimeline,
 	BadgeProgressionBar,
 	BadgeProgressRing,
+	BadgeProgressToNext,
 	BadgeStatsGrid,
 	BadgeTooltip,
 	MaxLevelCelebration,
@@ -36,6 +37,32 @@ describe('AchievementCard components', () => {
 		expect(paths?.[0]).toHaveAttribute('stroke', mockTheme.colors.accent);
 		expect(paths?.[5]).toHaveAttribute('opacity', '0.3');
 		expect(paths?.[5]).toHaveAttribute('stroke', mockTheme.colors.border);
+	});
+
+	it('clamps next-badge progress width', () => {
+		const { container, rerender } = render(
+			<BadgeProgressToNext
+				theme={mockTheme}
+				nextBadge={CONDUCTOR_BADGES[1]}
+				timeRemaining="10m remaining"
+				progressPercent={150}
+			/>
+		);
+
+		let progress = container.querySelector('.h-full.rounded-full') as HTMLElement;
+		expect(progress).toHaveStyle({ width: '100%' });
+
+		rerender(
+			<BadgeProgressToNext
+				theme={mockTheme}
+				nextBadge={CONDUCTOR_BADGES[1]}
+				timeRemaining="10m remaining"
+				progressPercent={-10}
+			/>
+		);
+
+		progress = container.querySelector('.h-full.rounded-full') as HTMLElement;
+		expect(progress).toHaveStyle({ width: '0%' });
 	});
 
 	it('renders the no-badge hero state', () => {

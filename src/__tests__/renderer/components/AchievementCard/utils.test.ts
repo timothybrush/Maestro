@@ -97,6 +97,11 @@ describe('AchievementCard utils', () => {
 			expect(interpolateColor('#000000', '#ffffff', 0)).toBe('#000000');
 			expect(interpolateColor('#000000', '#ffffff', 1)).toBe('#ffffff');
 			expect(interpolateColor('#000000', '#ffffff', 0.5)).toBe('#808080');
+			expect(interpolateColor('#000', '#fff', 0.5)).toBe('#808080');
+			expect(interpolateColor('#000000', '#ffffff', -1)).toBe('#000000');
+			expect(interpolateColor('#000000', '#ffffff', 2)).toBe('#ffffff');
+			expect(interpolateColor('not-a-color', '#abc', Number.NaN)).toBe('#aabbcc');
+			expect(interpolateColor('not-a-color', 'also-bad', 0.5)).toBe('#000000');
 		});
 
 		it('uses ring colors for locked and unlocked levels', () => {

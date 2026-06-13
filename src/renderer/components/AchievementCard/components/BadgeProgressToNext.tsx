@@ -16,6 +16,8 @@ export function BadgeProgressToNext({
 }: BadgeProgressToNextProps) {
 	if (!nextBadge) return null;
 
+	const clampedProgress = Math.max(0, Math.min(100, progressPercent));
+
 	return (
 		<div className="mb-4">
 			<div className="flex items-center justify-between text-xs mb-1">
@@ -29,7 +31,7 @@ export function BadgeProgressToNext({
 				<div
 					className="h-full rounded-full transition-all duration-500"
 					style={{
-						width: `${progressPercent}%`,
+						width: `${clampedProgress}%`,
 						background: `linear-gradient(90deg, ${theme.colors.accent} 0%, #FFD700 100%)`,
 					}}
 				/>

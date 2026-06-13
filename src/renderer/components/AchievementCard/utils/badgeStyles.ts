@@ -12,9 +12,41 @@ export function getTooltipPosition(level: number): BadgeTooltipPosition {
 	return 'center';
 }
 
+function normalizeHexColor(color: string): string | null {
+	if (!color.startsWith('#') || (color.length !== 4 && color.length !== 7)) {
+		return null;
+	}
+
+	const hex = color.slice(1);
+	if (!/^[0-9a-fA-F]+$/.test(hex)) {
+		return null;
+	}
+
+	if (hex.length === 3) {
+		return `#${hex
+			.split('')
+			.map((char) => char + char)
+			.join('')}`.toLowerCase();
+	}
+
+	return `#${hex}`.toLowerCase();
+}
+
+function fallbackHexColor(color1: string, color2: string): string {
+	return normalizeHexColor(color1) ?? normalizeHexColor(color2) ?? '#000000';
+}
+
 export function interpolateColor(color1: string, color2: string, t: number): string {
-	const hex1 = color1.replace('#', '');
-	const hex2 = color2.replace('#', '');
+	const normalizedColor1 = normalizeHexColor(color1);
+	const normalizedColor2 = normalizeHexColor(color2);
+
+	if (!normalizedColor1 || !normalizedColor2) {
+		return fallbackHexColor(color1, color2);
+	}
+
+	const safeT = Number.isFinite(t) ? Math.max(0, Math.min(1, t)) : 0;
+	const hex1 = normalizedColor1.slice(1);
+	const hex2 = normalizedColor2.slice(1);
 
 	const r1 = parseInt(hex1.substring(0, 2), 16);
 	const g1 = parseInt(hex1.substring(2, 4), 16);
@@ -24,9 +56,13 @@ export function interpolateColor(color1: string, color2: string, t: number): str
 	const g2 = parseInt(hex2.substring(2, 4), 16);
 	const b2 = parseInt(hex2.substring(4, 6), 16);
 
-	const r = Math.round(r1 + (r2 - r1) * t);
-	const g = Math.round(g1 + (g2 - g1) * t);
-	const b = Math.round(b1 + (b2 - b1) * t);
+	if ([r1, g1, b1, r2, g2, b2].some((value) => Number.isNaN(value))) {
+		return fallbackHexColor(color1, color2);
+	}
+
+	const r = Math.round(r1 + (r2 - r1) * safeT);
+	const g = Math.round(g1 + (g2 - g1) * safeT);
+	const b = Math.round(b1 + (b2 - b1) * safeT);
 
 	return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
 }

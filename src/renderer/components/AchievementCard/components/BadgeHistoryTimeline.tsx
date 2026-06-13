@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { ChevronDown, History } from 'lucide-react';
 import type { AutoRunStats, Theme } from '../../../types';
 import { getBadgeHistoryRows, shouldShowBadgeHistory } from '../utils/badgeHistory';
+import { getProgressionSegmentColor } from '../utils/badgeStyles';
 
 interface BadgeHistoryTimelineProps {
 	theme: Theme;
@@ -46,12 +47,7 @@ export function BadgeHistoryTimeline({ theme, badgeHistory }: BadgeHistoryTimeli
 								<div
 									className="w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-bold"
 									style={{
-										background:
-											row.badge.level <= 3
-												? theme.colors.accent
-												: row.badge.level <= 7
-													? '#FFD700'
-													: '#FF6B35',
+										background: getProgressionSegmentColor(row.badge.level, true, theme),
 										color: '#000',
 									}}
 								>

@@ -15,11 +15,11 @@ export function MaxLevelCelebration({ theme }: MaxLevelCelebrationProps) {
 			}}
 		>
 			<div className="flex items-center justify-center gap-2 mb-1">
-				<Star className="w-4 h-4" style={{ color: '#FFD700' }} />
+				<Star data-testid="star-icon" className="w-4 h-4" style={{ color: '#FFD700' }} />
 				<span className="font-bold" style={{ color: '#FFD700' }}>
 					Maximum Level Achieved!
 				</span>
-				<Star className="w-4 h-4" style={{ color: '#FFD700' }} />
+				<Star data-testid="star-icon" className="w-4 h-4" style={{ color: '#FFD700' }} />
 			</div>
 			<p className="text-xs" style={{ color: theme.colors.textDim }}>
 				You are a true Titan of the Baton
