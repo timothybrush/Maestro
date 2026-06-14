@@ -343,6 +343,38 @@ describe('AgentConfigPanel', () => {
 			expect(tuiButton?.className).not.toContain('ring-2');
 		});
 
+		it('disables the TUI option and falls back to API when the remote has no maestro-p', async () => {
+			// The remote probe reports maestro-p is absent: TUI can't run there, so
+			// the option is dropped and an unconfigured agent defaults to API.
+			(
+				window as unknown as {
+					maestro: { agents: { getRemoteMaestroPAvailable: ReturnType<typeof vi.fn> } };
+				}
+			).maestro.agents.getRemoteMaestroPAvailable.mockResolvedValue(false);
+			render(
+				<AgentConfigPanel
+					{...createDefaultProps({
+						onEnableMaestroPChange: vi.fn(),
+						isSshEnabled: true,
+						sshRemoteId: 'remote-without-maestro-p',
+					})}
+				/>
+			);
+
+			// Once the async probe resolves, the warning appears and TUI is gone.
+			await waitFor(() =>
+				expect(screen.getByText(/maestro-p was not found on the remote/)).toBeInTheDocument()
+			);
+			expect(screen.queryByText('TUI')).not.toBeInTheDocument();
+			const apiButton = screen.getByText('API').closest('button');
+			expect(apiButton?.className).toContain('ring-2');
+			(
+				window as unknown as {
+					maestro: { agents: { getRemoteMaestroPAvailable: ReturnType<typeof vi.fn> } };
+				}
+			).maestro.agents.getRemoteMaestroPAvailable.mockResolvedValue(null);
+		});
+
 		it('renders the selector for SSH agents but drops the Dynamic option', () => {
 			render(
 				<AgentConfigPanel

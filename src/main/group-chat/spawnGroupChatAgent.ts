@@ -12,7 +12,8 @@
 import { IProcessManager } from './group-chat-moderator';
 import { getContextWindowValue } from '../utils/agent-args';
 import { wrapSpawnWithSsh } from '../utils/ssh-spawn-wrapper';
-import type { SshRemoteSettingsStore } from '../utils/ssh-remote-resolver';
+import { getSshRemoteConfig, type SshRemoteSettingsStore } from '../utils/ssh-remote-resolver';
+import { ensureRemoteMaestroPProbed } from '../agents/probeRemoteMaestroP';
 import { getWindowsSpawnConfig } from './group-chat-config';
 import type { AgentConfig } from '../agents/definitions';
 import type { AgentSshRemoteConfig } from '../../shared/types';
@@ -107,6 +108,18 @@ export async function spawnGroupChatAgent(
 	let spawnEnvVars = customEnvVars;
 	let spawnSshStdinScript: string | undefined;
 
+	// Over SSH, warm the remote maestro-p probe BEFORE resolving so a remote TUI
+	// selection falls back to API instead of exiting 127 when maestro-p isn't
+	// installed on the remote (the resolver reads this from the cache).
+	if (sshRemoteConfig?.enabled && sshStore) {
+		const sshRemote = getSshRemoteConfig(sshStore, {
+			sessionSshConfig: sshRemoteConfig,
+		}).config;
+		if (sshRemote) {
+			await ensureRemoteMaestroPProbed(sshRemote);
+		}
+	}
+
 	// Resolve the Claude token source (maestro-p TUI vs `claude --print`) and,
 	// for the interactive/dynamic case, rewrite the spawn to run maestro-p via
 	// process.execPath. The resolver returns API for non-Claude agents and SSH
@@ -117,6 +130,9 @@ export async function spawnGroupChatAgent(
 		agent,
 		tokenMode: config.tokenMode ?? 'api',
 		sshEnabled: !!sshRemoteConfig?.enabled,
+		// Lets the resolver fall a remote TUI spawn back to API when the remote
+		// has no maestro-p on its PATH (avoids exit 127).
+		sshRemoteId: sshRemoteConfig?.remoteId ?? undefined,
 		command: baseCommand,
 		sessionCustomEnvVars: customEnvVars,
 		maestroPPath: config.maestroPPath,

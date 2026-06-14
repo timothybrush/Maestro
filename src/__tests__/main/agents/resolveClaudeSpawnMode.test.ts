@@ -50,6 +50,9 @@ function makeDeps(
 		resolveConfigDirKey: () => 'key',
 		getUsageSnapshot: () => healthySnapshot(),
 		fileExists: () => true,
+		// Default to "unknown" so remote interactive stays optimistic unless a test
+		// pins a probe result.
+		getRemoteMaestroPAvailable: () => undefined,
 		...over,
 	};
 }
@@ -111,6 +114,51 @@ describe('resolveClaudeSpawnMode', () => {
 		});
 		expect(r.mode).toBe('api');
 		expect(r.remote).toBeFalsy();
+	});
+
+	it('SSH-enabled interactive falls back to API when the remote has no maestro-p (known-absent)', () => {
+		const r = resolveClaudeSpawnMode({
+			agent: claudeAgent,
+			tokenMode: 'interactive',
+			sshEnabled: true,
+			sshRemoteId: 'remote-1',
+			command: 'claude',
+			now: NOW,
+			// Probe determined maestro-p is NOT on the remote PATH: spawning it would
+			// exit 127 on every turn, so the resolver must fall back to API.
+			deps: makeDeps({ getRemoteMaestroPAvailable: () => false }),
+		});
+		expect(r.mode).toBe('api');
+		expect(r.remote).toBeFalsy();
+		expect(r.maestroPBinPath).toBeNull();
+	});
+
+	it('SSH-enabled interactive stays remote when the remote has maestro-p (known-present)', () => {
+		const r = resolveClaudeSpawnMode({
+			agent: claudeAgent,
+			tokenMode: 'interactive',
+			sshEnabled: true,
+			sshRemoteId: 'remote-1',
+			command: 'claude',
+			now: NOW,
+			deps: makeDeps({ getRemoteMaestroPAvailable: () => true }),
+		});
+		expect(r.mode).toBe('interactive');
+		expect(r.remote).toBe(true);
+	});
+
+	it('SSH-enabled interactive stays remote when remote maestro-p availability is unknown (optimistic)', () => {
+		const r = resolveClaudeSpawnMode({
+			agent: claudeAgent,
+			tokenMode: 'interactive',
+			sshEnabled: true,
+			sshRemoteId: 'remote-1',
+			command: 'claude',
+			now: NOW,
+			deps: makeDeps({ getRemoteMaestroPAvailable: () => undefined }),
+		});
+		expect(r.mode).toBe('interactive');
+		expect(r.remote).toBe(true);
 	});
 
 	it('SSH-enabled remote interactive carries a custom remote claude path as the real bin', () => {

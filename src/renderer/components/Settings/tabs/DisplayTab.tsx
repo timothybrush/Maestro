@@ -125,6 +125,8 @@ export function DisplayTab({ theme }: DisplayTabProps) {
 		setShowLeftPanelCueIndicator,
 		showLeftPanelStartupCommandIndicator,
 		setShowLeftPanelStartupCommandIndicator,
+		showGroupLabelInBookmarks,
+		setShowGroupLabelInBookmarks,
 		showFullGroupLabelInBookmarks,
 		setShowFullGroupLabelInBookmarks,
 		fileEditWordWrap,
@@ -760,10 +762,47 @@ export function DisplayTab({ theme }: DisplayTabProps) {
 						</button>
 					</div>
 
-					{/* Show full group label on bookmarked agents */}
+					{/* Show group label on bookmarked agents */}
 					<div
 						className="flex items-center justify-between pt-3 border-t"
 						style={{ borderColor: theme.colors.border }}
+					>
+						<div>
+							<p className="text-sm" style={{ color: theme.colors.textMain }}>
+								Show group label on bookmarked agents
+							</p>
+							<p className="text-xs opacity-50 mt-0.5">
+								Display the group badge (e.g. <span className="font-mono">CCS</span>) next to
+								bookmarked agents. Turn off to hide the group pill entirely.
+							</p>
+						</div>
+						<button
+							onClick={() => setShowGroupLabelInBookmarks(!showGroupLabelInBookmarks)}
+							className="relative w-10 h-5 rounded-full transition-colors flex-shrink-0 outline-none"
+							tabIndex={0}
+							style={{
+								backgroundColor: showGroupLabelInBookmarks
+									? theme.colors.accent
+									: theme.colors.bgActivity,
+							}}
+							role="switch"
+							aria-checked={showGroupLabelInBookmarks}
+							aria-label="Show group label on bookmarked agents in left side bar"
+						>
+							<span
+								className={`absolute left-0 top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
+									showGroupLabelInBookmarks ? 'translate-x-5' : 'translate-x-0.5'
+								}`}
+							/>
+						</button>
+					</div>
+
+					{/* Show full group label on bookmarked agents (sub-option of the group
+					    label toggle above; dimmed and disabled when the pill is hidden). */}
+					<div
+						className={`flex items-center justify-between pt-2 pl-4 transition-opacity ${
+							showGroupLabelInBookmarks ? '' : 'opacity-40'
+						}`}
 					>
 						<div>
 							<p className="text-sm" style={{ color: theme.colors.textMain }}>
@@ -778,8 +817,9 @@ export function DisplayTab({ theme }: DisplayTabProps) {
 						</div>
 						<button
 							onClick={() => setShowFullGroupLabelInBookmarks(!showFullGroupLabelInBookmarks)}
-							className="relative w-10 h-5 rounded-full transition-colors flex-shrink-0 outline-none"
-							tabIndex={0}
+							disabled={!showGroupLabelInBookmarks}
+							className="relative w-10 h-5 rounded-full transition-colors flex-shrink-0 outline-none disabled:cursor-not-allowed"
+							tabIndex={showGroupLabelInBookmarks ? 0 : -1}
 							style={{
 								backgroundColor: showFullGroupLabelInBookmarks
 									? theme.colors.accent

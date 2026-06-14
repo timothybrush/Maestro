@@ -76,6 +76,37 @@ describe('getClaudeTokenMode', () => {
 			expect(getClaudeTokenMode({}, { sshEnabled: false })).toBe('api');
 			expect(getClaudeTokenMode(undefined)).toBe('api');
 		});
+
+		describe('remote maestro-p availability (sshMaestroPAvailable option)', () => {
+			it('flips the unconfigured SSH default to api when the remote has no maestro-p', () => {
+				expect(getClaudeTokenMode({}, { sshEnabled: true, sshMaestroPAvailable: false })).toBe(
+					'api'
+				);
+				expect(
+					getClaudeTokenMode(undefined, { sshEnabled: true, sshMaestroPAvailable: false })
+				).toBe('api');
+			});
+
+			it('keeps the optimistic interactive default when availability is unknown or present', () => {
+				expect(getClaudeTokenMode({}, { sshEnabled: true, sshMaestroPAvailable: undefined })).toBe(
+					'interactive'
+				);
+				expect(getClaudeTokenMode({}, { sshEnabled: true, sshMaestroPAvailable: true })).toBe(
+					'interactive'
+				);
+			});
+
+			it('does not override an EXPLICIT opt-in even when the remote has no maestro-p', () => {
+				// The selector / resolver enforce availability at spawn time; the stored
+				// preference is left intact so it survives a transient probe miss.
+				expect(
+					getClaudeTokenMode(
+						{ enableMaestroP: true, maestroPMode: 'interactive' },
+						{ sshEnabled: true, sshMaestroPAvailable: false }
+					)
+				).toBe('interactive');
+			});
+		});
 	});
 });
 

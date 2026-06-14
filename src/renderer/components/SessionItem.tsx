@@ -193,6 +193,7 @@ export const SessionItem = memo(function SessionItem({
 	const showLeftPanelStartupCommandIndicator = useSettingsStore(
 		(s) => s.showLeftPanelStartupCommandIndicator
 	);
+	const showGroupLabelInBookmarks = useSettingsStore((s) => s.showGroupLabelInBookmarks);
 	const showFullGroupLabelInBookmarks = useSettingsStore((s) => s.showFullGroupLabelInBookmarks);
 	const maestroCueEnabled = useSettingsStore((s) => s.encoreFeatures.maestroCue);
 	const colorBlindMode = useSettingsStore((s) => s.colorBlindMode);
@@ -397,9 +398,10 @@ export const SessionItem = memo(function SessionItem({
 			{/* Right side: Indicators and actions */}
 			<div className="flex items-center gap-2 ml-2">
 				{/* Group badge (only in bookmark variant when session belongs to a group).
-				    Abbreviated by default; the showFullGroupLabelInBookmarks setting swaps in
-				    the full group name, truncated with the complete value available on hover. */}
-				{variant === 'bookmark' && group && (
+				    Hidden entirely when showGroupLabelInBookmarks is off. Abbreviated by
+				    default; the showFullGroupLabelInBookmarks setting swaps in the full group
+				    name, truncated with the complete value available on hover. */}
+				{variant === 'bookmark' && group && showGroupLabelInBookmarks && (
 					<span
 						className={`text-[9px] px-1 py-0.5 rounded${
 							showFullGroupLabelInBookmarks ? ' max-w-[140px] truncate' : ''

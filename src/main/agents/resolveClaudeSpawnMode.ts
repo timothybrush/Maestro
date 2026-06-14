@@ -31,6 +31,7 @@ import {
 	getSnapshot as defaultGetUsageSnapshot,
 	resolveConfigDirKey as defaultResolveConfigDirKey,
 } from '../stores/claudeUsageStore';
+import { getRemoteMaestroPAvailable as defaultGetRemoteMaestroPAvailable } from './remoteMaestroPCache';
 import { logger } from '../utils/logger';
 import type { ClaudeTokenMode } from '../../shared/claudeTokenMode';
 
@@ -49,6 +50,12 @@ export interface ResolveClaudeSpawnModeDeps {
 	resolveConfigDirKey: (env: NodeJS.ProcessEnv) => string;
 	getUsageSnapshot: (key: string) => UsageSnapshot | null;
 	fileExists: (p: string) => boolean;
+	/**
+	 * Cached result of probing the SSH remote for `maestro-p` on its PATH.
+	 * `false` = known-absent (fall the remote TUI spawn back to API), `true` =
+	 * present, `undefined` = never probed (stay optimistic).
+	 */
+	getRemoteMaestroPAvailable: (remoteId?: string | null) => boolean | undefined;
 	selectMode: typeof defaultSelectMode;
 }
 
@@ -64,6 +71,7 @@ const defaultDeps: ResolveClaudeSpawnModeDeps = {
 			return false;
 		}
 	},
+	getRemoteMaestroPAvailable: defaultGetRemoteMaestroPAvailable,
 	selectMode: defaultSelectMode,
 };
 
@@ -72,8 +80,16 @@ export interface ResolveClaudeSpawnModeInput {
 	agent: ResolverAgent;
 	/** Canonical token mode for this spawn (see getClaudeTokenMode). */
 	tokenMode: ClaudeTokenMode;
-	/** SSH-enabled spawns always stay on API - maestro-p needs the local TUI. */
+	/**
+	 * SSH-enabled spawn. Interactive (TUI) mode runs maestro-p on the remote
+	 * host; it falls back to API when the remote probe says maestro-p is absent.
+	 */
 	sshEnabled: boolean;
+	/**
+	 * SSH remote id, used to look up the cached remote maestro-p availability so
+	 * a remote TUI spawn can fall back to API when the remote can't run it.
+	 */
+	sshRemoteId?: string;
 	/** Base command that would otherwise spawn (the claude binary path). */
 	command: string;
 	/** Per-session custom Path override, if any. */
@@ -180,6 +196,25 @@ export function resolveClaudeSpawnMode(input: ResolveClaudeSpawnModeInput): Clau
 	// spending Max-plan quota the user never explicitly opted into.
 	if (sshEnabled) {
 		if (tokenMode === 'interactive') {
+			// The remote must have maestro-p on its PATH to drive the TUI. If a probe
+			// has already determined it is absent, fall back to API rather than
+			// spawning `maestro-p` on the remote and exiting 127 on every turn - the
+			// remote analogue of the local `fileExists` guard below. Unknown
+			// (never probed) stays optimistic: a probe at the spawn/config surface
+			// warms the cache, so a correctly-set-up remote is never downgraded.
+			if (d.getRemoteMaestroPAvailable(input.sshRemoteId) === false) {
+				logger.warn(
+					'maestro-p (TUI) selected for an SSH remote that has no maestro-p on its PATH - falling back to API mode',
+					LOG_CONTEXT,
+					{ sshRemoteId: input.sshRemoteId }
+				);
+				return {
+					mode: 'api',
+					reason: 'auto',
+					maestroPBinPath: null,
+					configDirKey: d.resolveConfigDirKey(envForKey),
+				};
+			}
 			return {
 				mode: 'interactive',
 				reason: 'auto',

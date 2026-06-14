@@ -32,6 +32,7 @@ import {
 	CreateHandlerOptions,
 } from '../../utils/ipcHandler';
 import { getSshRemoteConfig, createSshRemoteStoreAdapter } from '../../utils/ssh-remote-resolver';
+import { ensureRemoteMaestroPProbed } from '../../agents/probeRemoteMaestroP';
 import { getPrompt } from '../../prompt-manager';
 import { shellEscape } from '../../utils/shell-escape';
 import { buildSshCommandWithStdin } from '../../utils/ssh-command-builder';
@@ -292,6 +293,22 @@ export function registerProcessHandlers(deps: ProcessHandlerDependencies): void 
 						}>
 					).find((s) => s?.id === config.sessionId);
 
+					// Over SSH, warm the remote maestro-p probe BEFORE resolving so the
+					// resolver's TUI->API backstop fires on the very first spawn - the
+					// readiness probe / config modal that would otherwise warm the cache
+					// may never have run (app just launched, agent sent to directly).
+					// Without this an unconfigured/interactive SSH agent resolves to the
+					// remote TUI on a cold cache and exits 127 when maestro-p is absent.
+					let remoteMaestroPAvailable: boolean | undefined;
+					if (isSshEnabled) {
+						const sshRemote = getSshRemoteConfig(createSshRemoteStoreAdapter(settingsStore), {
+							sessionSshConfig: config.sessionSshRemoteConfig,
+						}).config;
+						if (sshRemote) {
+							remoteMaestroPAvailable = await ensureRemoteMaestroPProbed(sshRemote);
+						}
+					}
+
 					const tokenMode = getClaudeTokenMode(
 						{
 							enableMaestroP: persistedSession?.enableMaestroP ?? config.enableMaestroP,
@@ -301,14 +318,18 @@ export function registerProcessHandlers(deps: ProcessHandlerDependencies): void 
 							// fields explicitly on the spawn payload).
 							maestroPMode: persistedSession?.maestroPMode ?? config.maestroPMode,
 						},
-						// Remote agents default to the TUI when the user hasn't chosen.
-						{ sshEnabled: isSshEnabled }
+						// Remote agents default to the TUI when the user hasn't chosen,
+						// unless the remote has no maestro-p to run it (then API).
+						{ sshEnabled: isSshEnabled, sshMaestroPAvailable: remoteMaestroPAvailable }
 					);
 
 					const decision = resolveClaudeSpawnMode({
 						agent,
 						tokenMode,
 						sshEnabled: isSshEnabled,
+						// Lets the resolver fall a remote TUI spawn back to API when the
+						// remote has no maestro-p on its PATH (avoids exit 127).
+						sshRemoteId: config.sessionSshRemoteConfig?.remoteId ?? undefined,
 						command: config.command,
 						sessionCustomPath: config.sessionCustomPath,
 						sessionCustomEnvVars: config.sessionCustomEnvVars,

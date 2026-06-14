@@ -663,6 +663,10 @@ export const DISPLAY_SETTINGS: SearchableSetting[] = [
 			'abbreviation',
 			'tag',
 			'label',
+			'hide',
+			'hide group',
+			'hide pill',
+			'group pill',
 		],
 	},
 	{

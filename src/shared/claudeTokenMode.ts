@@ -36,6 +36,14 @@ export interface GetClaudeTokenModeOptions {
 	 * is affected - an explicit `false` (the user picked API) is still honored.
 	 */
 	sshEnabled?: boolean;
+	/**
+	 * Whether the SSH remote has `maestro-p` on its PATH (from a remote probe).
+	 * When known to be `false`, the unconfigured SSH default flips back to `api`
+	 * instead of `interactive`: the remote can't run the TUI, so defaulting to it
+	 * would only exit 127. `undefined` (never probed) keeps the optimistic TUI
+	 * default. Ignored when {@link sshEnabled} is not set.
+	 */
+	sshMaestroPAvailable?: boolean;
 }
 
 /**
@@ -52,9 +60,10 @@ export function getClaudeTokenMode(
 	src: ClaudeTokenModeSource | null | undefined,
 	opts?: GetClaudeTokenModeOptions
 ): ClaudeTokenMode {
-	// Remote default: an unconfigured SSH agent starts on the TUI (Max plan).
+	// Remote default: an unconfigured SSH agent starts on the TUI (Max plan),
+	// unless a probe has shown the remote has no maestro-p to run it - then API.
 	if (opts?.sshEnabled && src?.enableMaestroP === undefined) {
-		return 'interactive';
+		return opts.sshMaestroPAvailable === false ? 'api' : 'interactive';
 	}
 	if (!src?.enableMaestroP) {
 		return 'api';

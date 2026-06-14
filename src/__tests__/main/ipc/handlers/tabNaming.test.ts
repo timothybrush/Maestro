@@ -557,8 +557,8 @@ describe('Tab Naming IPC Handlers', () => {
 				expect(mockProcessManager.spawn).toHaveBeenCalled();
 			});
 
-			// Advance time past the timeout (45 seconds)
-			vi.advanceTimersByTime(46000);
+			// Advance time past the timeout (120 seconds)
+			vi.advanceTimersByTime(121000);
 
 			const result = await resultPromise;
 			expect(result).toBeNull();
@@ -1338,7 +1338,12 @@ describe('tab naming diagnostic logging', () => {
 
 		onDataCallback?.('tab-naming-mock-uuid-1234', 'Error: authentication failed');
 		onExitCallback?.('tab-naming-mock-uuid-1234', 1);
-		await resultPromise;
+		const result = await resultPromise;
+
+		// A non-zero exit must yield null, NOT a name mined from the error banner.
+		// (Regression guard: an "X unavailable. Learn more: https://.../news/..."
+		// banner used to be parsed into a garbage tab name.)
+		expect(result).toBeNull();
 
 		expect(loggerMock.warn).toHaveBeenCalledWith(
 			'Tab naming process exited with non-zero code',
@@ -1416,7 +1421,7 @@ describe('tab naming diagnostic logging', () => {
 			'Thinking about what name to give this tab based on the conversation context provided'
 		);
 
-		await vi.advanceTimersByTimeAsync(46000);
+		await vi.advanceTimersByTimeAsync(121000);
 		const result = await resultPromise;
 
 		expect(result).toBeNull();

@@ -1061,6 +1061,7 @@ interface MaestroAPI {
 			callback: (payload: import('../shared/agentCapabilities').SnapshotUpdatedPayload) => void
 		) => () => void;
 		getMaestroPDetectedPath: () => Promise<string | null>;
+		getRemoteMaestroPAvailable: (sshRemoteId: string) => Promise<boolean | null>;
 		getClaudeUsageSnapshots: () => Promise<
 			Record<
 				string,

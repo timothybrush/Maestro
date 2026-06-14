@@ -65,10 +65,14 @@ export interface TabNamingHandlerDependencies {
 }
 
 /**
- * Timeout for tab naming requests (45 seconds)
- * Allows headroom for agent cold starts while still failing fast
+ * Timeout for tab naming requests (120 seconds)
+ * Tab naming inherits the agent's own model (we never pin a fast one), so a
+ * heavyweight default like opus can take well over the old 45s budget on a cold
+ * run. The early-extract loop still resolves the instant a name appears, so this
+ * ceiling only bites the genuinely slow case - we'd rather wait and get a real
+ * name than time out and leave the tab unnamed.
  */
-const TAB_NAMING_TIMEOUT_MS = 45 * 1000;
+const TAB_NAMING_TIMEOUT_MS = 120 * 1000;
 
 /**
  * Interval for checking partial output for a valid tab name.
@@ -405,6 +409,12 @@ export function registerTabNamingHandlers(deps: TabNamingHandlerDependencies): v
 								return;
 							}
 
+							// A non-zero exit means the spawn itself failed (model unavailable,
+							// auth expired, rate limit, network blip). Whatever the CLI printed
+							// is an error banner, NOT a name - mining it produces garbage like
+							// "com/news/fable-mythos-access" from an "X is unavailable. Learn
+							// more: https://.../news/..." message. Bail to null instead of
+							// extracting. The send-side trigger retries on the next message.
 							if (code !== undefined && code !== 0) {
 								logger.warn('Tab naming process exited with non-zero code', LOG_CONTEXT, {
 									sessionId,
@@ -412,6 +422,8 @@ export function registerTabNamingHandlers(deps: TabNamingHandlerDependencies): v
 									outputLength: output.length,
 									outputSnippet: output.substring(0, 200),
 								});
+								resolveWith(null, `failed (exit code ${code})`);
+								return;
 							}
 
 							const extraction = extractTabNameFromOutput(config.agentType, output);

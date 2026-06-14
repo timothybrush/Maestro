@@ -11,6 +11,8 @@ import type { CueExecutionConfig } from './cue-executor';
 import { getAgentDefinition, getAgentCapabilities } from '../agents';
 import { buildAgentArgs, applyAgentConfigOverrides } from '../utils/agent-args';
 import { wrapSpawnWithSsh, type SshSpawnWrapConfig } from '../utils/ssh-spawn-wrapper';
+import { getSshRemoteConfig } from '../utils/ssh-remote-resolver';
+import { ensureRemoteMaestroPProbed } from '../agents/probeRemoteMaestroP';
 import { sanitizeCustomEnvVars } from './cue-env-sanitizer';
 import {
 	resolveClaudeSpawnMode,
@@ -147,13 +149,26 @@ export async function buildSpawnSpec(
 	// maestro-p's "prompt is the trailing positional" contract stays intact.
 	// SSH spawns resolve to `api` (the resolver short-circuits on sshEnabled),
 	// because maestro-p needs the local TUI and SSH runs `claude --print`.
+	// Over SSH, warm the remote maestro-p probe BEFORE resolving so a headless Cue
+	// spawn falls a remote TUI selection back to API instead of exiting 127 when
+	// maestro-p isn't installed on the remote (no UI/readiness probe runs first).
+	let remoteMaestroPAvailable: boolean | undefined;
+	if (sshRemoteConfig?.enabled && sshStore) {
+		const sshRemote = getSshRemoteConfig(sshStore, {
+			sessionSshConfig: sshRemoteConfig,
+		}).config;
+		if (sshRemote) {
+			remoteMaestroPAvailable = await ensureRemoteMaestroPProbed(sshRemote);
+		}
+	}
 	const tokenMode = getClaudeTokenMode(
 		{
 			enableMaestroP: config.enableMaestroP,
 			maestroPMode: config.maestroPMode,
 		},
-		// Remote agents default to the TUI when the user hasn't chosen.
-		{ sshEnabled: !!sshRemoteConfig?.enabled }
+		// Remote agents default to the TUI when the user hasn't chosen, unless the
+		// remote has no maestro-p to run it (then API).
+		{ sshEnabled: !!sshRemoteConfig?.enabled, sshMaestroPAvailable: remoteMaestroPAvailable }
 	);
 	const claudeSpawnDecision = resolveClaudeSpawnMode({
 		agent: {
@@ -164,6 +179,9 @@ export async function buildSpawnSpec(
 		},
 		tokenMode,
 		sshEnabled: !!sshRemoteConfig?.enabled,
+		// Lets the resolver fall a remote TUI spawn back to API when the remote
+		// has no maestro-p on its PATH (avoids exit 127).
+		sshRemoteId: sshRemoteConfig?.remoteId ?? undefined,
 		command,
 		sessionCustomPath: config.customPath,
 		sessionCustomEnvVars: effectiveEnvVars,
