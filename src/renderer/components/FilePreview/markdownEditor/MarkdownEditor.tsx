@@ -201,7 +201,14 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
 			ref,
 			() => ({
 				focus() {
-					viewRef.current?.focus();
+					// Focus the contentDOM element directly rather than CM6's
+					// view.focus(). On a view mounted in the same frame (which is
+					// exactly the enter-edit-mode case), view.focus() silently
+					// no-ops and focus falls to <body>, breaking the Cmd+E toggle
+					// until the user clicks in. A plain contentDOM.focus() sticks.
+					const view = viewRef.current;
+					if (!view) return;
+					view.contentDOM.focus({ preventScroll: true });
 				},
 				scrollToLine(line: number, opts?: { select?: boolean }) {
 					const view = viewRef.current;

@@ -817,6 +817,7 @@ export const FilePreview = React.memo(
 				const canSyncLine = previewSyncSource() !== null;
 				const line = previewTopLineRef.current;
 				editorTopLineRef.current = line;
+				// Sync scroll one frame in (after the editor lays out).
 				requestAnimationFrame(() => {
 					if (canSyncLine) {
 						editorRef.current?.scrollToLine(line, { select: false });
@@ -827,7 +828,14 @@ export const FilePreview = React.memo(
 						editorRef.current?.setScrollPercent(maxScroll > 0 ? scrollTop / maxScroll : 0);
 					}
 				});
-				editorRef.current.focus();
+				// Focus must wait until AFTER the freshly-mounted editor has
+				// painted: a rAF callback runs BEFORE the next paint, and calling
+				// focus() on a not-yet-painted contenteditable silently no-ops -
+				// focus falls to <body>, which is what broke the Cmd+E toggle
+				// (the user had to click into the editor before Cmd+E worked
+				// again). setTimeout(0) runs as a macrotask after paint, where
+				// focus reliably sticks.
+				setTimeout(() => editorRef.current?.focus(), 0);
 			} else if (!markdownEditMode && wasEditMode && containerRef.current) {
 				// Exiting edit mode - the editor has already unmounted, so use the
 				// scroll-tracked top line to re-anchor the preview.
