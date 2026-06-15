@@ -491,6 +491,20 @@ async function runMode(args: ParsedArgs): Promise<never> {
 
 	driver.on('limit-hit', () => {
 		limitHit = true;
+		// A quota limit means claude paints the limit line on the TUI and sits —
+		// it won't emit (further) transcript output this turn. Don't wait for the
+		// first-byte / idle timeout (up to 120s) to settle: that long stall is what
+		// makes a Dynamic-mode turn look like it produced "no response" after the
+		// mode-switch banner. Finalize after the same short drain grace used for
+		// end_turn (so any assistant text painted BEFORE the limit still flushes),
+		// then exit. `limitHit` forces exit code 2, which fires the desktop's
+		// interactive→API replay so the user's prompt is promptly re-sent under
+		// `claude --print` and actually gets answered.
+		setTimeout(() => {
+			if (!finalized) {
+				finalize({ isError: false, exitCode: 2 });
+			}
+		}, END_TURN_GRACE_MS);
 	});
 	driver.on('exit', () => {
 		if (finalized) return;

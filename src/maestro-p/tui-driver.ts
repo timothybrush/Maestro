@@ -77,8 +77,36 @@ const ROLLING_BUFFER_CAP = 16 * 1024;
 // covers \r itself, which is what real captures look like.
 const READY_REGEX = /[›❯]\s/;
 
-// Matches both "5-hour limit reached/exceeded" and "weekly limit reached/exceeded".
-const LIMIT_REGEX = /(5-hour|weekly)\s+limit\s+(reached|exceeded)/i;
+// Plan-quota exhaustion phrases Claude's TUI paints when the Max subscription's
+// rolling 5-hour / weekly window (or API credit) is spent. A match makes
+// maestro-p exit 2, which fires the desktop's interactive->API replay so the
+// user's prompt is re-sent under `claude --print`.
+//
+// Kept deliberately BROAD across Anthropic's wordings and word orders so a
+// relabeled message ("monthly limit reached", "reached your usage limit",
+// "Opus weekly limit reached", "quota exceeded", "out of credits", ...) still
+// trips it — the previous `(5-hour|weekly) limit (reached|exceeded)` only caught
+// two exact phrasings and silently produced no fallback for anything else.
+//
+// Scoped to PLAN-QUOTA meaning via a blacklist: it must NOT fire on
+// token/context-window limits, transient rate limits, or "disk usage limit"
+// text, where switching the token source wouldn't help and a false positive
+// would needlessly abort a good interactive turn. Capacity WARNINGS
+// ("approaching your weekly limit", "upgrade to raise your usage limit") are
+// excluded for free since they carry no reached/exceeded/hit word.
+const LIMIT_REACHED_WORDS = 'reached|exceeded|hit|exhausted|used up|run out|maxed out';
+const NON_QUOTA_LIMIT_WORDS = 'token|context|character|\\bchars?\\b|byte|disk|rate';
+const LIMIT_REGEX = new RegExp(
+	[
+		// A line that mentions a "limit" AND a reached/exceeded/hit word, in any
+		// order, and is NOT scoped to a non-quota resource.
+		`^(?!.*\\b(?:${NON_QUOTA_LIMIT_WORDS})\\b)(?=.*\\blimits?\\b)(?=.*\\b(?:${LIMIT_REACHED_WORDS})\\b)`,
+		// Quota/credit exhaustion that may omit the word "limit".
+		`\\bquota\\b[^\\n]{0,20}?\\b(?:${LIMIT_REACHED_WORDS})\\b`,
+		`\\b(?:out of|insufficient|no)\\b[^\\n]{0,20}?\\b(?:credits?|quota|balance)\\b`,
+	].join('|'),
+	'i'
+);
 
 // Claude TUI v2.1.143+ shows a "Quick safety check: Is this a project you
 // created or one you trust?" prompt on first launch in any folder, with

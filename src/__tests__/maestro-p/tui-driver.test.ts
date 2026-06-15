@@ -475,6 +475,42 @@ describe('TuiDriver', () => {
 			feed('weekly status report\n');
 			expect(limitHandler).not.toHaveBeenCalled();
 		});
+
+		// Broad plan-quota phrasings (varied window, word order, and "credits"/
+		// "quota" forms that omit the word "limit") must all trip the fallback.
+		it.each([
+			'Monthly limit reached',
+			"You've reached your usage limit",
+			"You've hit your usage limit for now",
+			'Claude Opus weekly limit reached',
+			'usage limit reached - resets at 3pm',
+			'Your quota has been exceeded',
+			'You are out of credits',
+			'Insufficient credits remaining',
+		])('fires on quota message: %s', async (msg) => {
+			const driver = await makeDriver();
+			const limitHandler = vi.fn();
+			driver.on('limit-hit', limitHandler);
+			feed(`${msg}\n`);
+			expect(limitHandler).toHaveBeenCalledTimes(1);
+		});
+
+		// Non-quota "limit" lines: switching the token source wouldn't help, so a
+		// false positive that aborts the interactive turn must be avoided. Capacity
+		// warnings carry no reached/exceeded/hit word and are excluded for free.
+		it.each([
+			'Maximum token limit reached. Start a new session.',
+			'Context limit exceeded. Start a new session.',
+			'Rate limit exceeded. Please wait.',
+			'Approaching your weekly limit',
+			'Upgrade to raise your usage limit',
+		])('does not fire on non-quota line: %s', async (msg) => {
+			const driver = await makeDriver();
+			const limitHandler = vi.fn();
+			driver.on('limit-hit', limitHandler);
+			feed(`${msg}\n`);
+			expect(limitHandler).not.toHaveBeenCalled();
+		});
 	});
 
 	describe('send()', () => {
