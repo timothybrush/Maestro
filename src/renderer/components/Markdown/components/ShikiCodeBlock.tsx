@@ -10,6 +10,7 @@ import React from 'react';
 import type { ExtraProps } from 'react-markdown';
 import type { Theme } from '../../../types';
 import { CodeFence } from '../../CodeFence/CodeFence';
+import { MermaidCodeBlock } from './MermaidCodeBlock';
 
 export function createShikiCodeBlock(theme: Theme, onCopy: (text: string) => void) {
 	return function ShikiCodeBlock({ children }: JSX.IntrinsicElements['pre'] & ExtraProps) {
@@ -24,6 +25,12 @@ export function createShikiCodeBlock(theme: Theme, onCopy: (text: string) => voi
 			const match = (className || '').match(/language-([\w+\-#]+)/);
 			const language = match ? match[1] : '';
 			const codeContent = String(codeChildren).replace(/\n$/, '');
+
+			// Mermaid fences render as live diagrams (with a Diagram/Source toggle)
+			// rather than highlighted source. CodeFence has no custom-language path.
+			if (language === 'mermaid') {
+				return <MermaidCodeBlock code={codeContent} theme={theme} onCopy={onCopy} />;
+			}
 
 			return <CodeFence language={language} code={codeContent} theme={theme} onCopy={onCopy} />;
 		}

@@ -18,6 +18,13 @@ vi.mock('shiki', () => ({
 vi.mock('highlight.js', () => ({
 	default: { highlightAuto: vi.fn(() => ({ language: null, relevance: 0 })) },
 }));
+// Stub MermaidRenderer so the chat-preset mermaid path doesn't pull in the real
+// mermaid library (async render, no-op in jsdom). We only assert that the chat
+// surface routes mermaid through MermaidCodeBlock's wrapper, not the diagram itself.
+vi.mock('../../../../renderer/components/MermaidRenderer', () => ({
+	MermaidRenderer: ({ chart }: { chart: string }) =>
+		React.createElement('div', { 'data-testid': 'mermaid-diagram' }, chart),
+}));
 
 const noop = () => {};
 
@@ -89,6 +96,22 @@ describe('Markdown presets', () => {
 				<Markdown preset="chat" content={'$$a + b$$'} theme={mockTheme} onCopy={noop} />
 			);
 			expect(container.querySelector('.katex')).not.toBeInTheDocument();
+		});
+
+		it('renders mermaid fences via MermaidCodeBlock, not the plain CodeFence', () => {
+			const { container, getByTitle } = render(
+				<Markdown
+					preset="chat"
+					content={'```mermaid\ngraph TD; A-->B;\n```'}
+					theme={mockTheme}
+					onCopy={noop}
+				/>
+			);
+			// Routed through the Diagram/Source wrapper...
+			expect(container.querySelector('.mermaid-code-block')).toBeInTheDocument();
+			expect(getByTitle('Show diagram source')).toBeInTheDocument();
+			// ...not the syntax-highlighting code fence used for ordinary languages.
+			expect(container.querySelector('[data-testid="code-fence"]')).not.toBeInTheDocument();
 		});
 	});
 

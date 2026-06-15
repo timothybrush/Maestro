@@ -286,6 +286,63 @@ describe('TuiDriver', () => {
 		});
 	});
 
+	describe("'bypass-accepted' event (--dangerously-skip-permissions gate)", () => {
+		beforeEach(() => {
+			vi.useFakeTimers();
+		});
+		afterEach(() => {
+			vi.useRealTimers();
+		});
+
+		it('selects "Yes, I accept" (Down then Enter) instead of the "No, exit" default', async () => {
+			const driver = await makeDriver();
+			const bypassHandler = vi.fn();
+			driver.on('bypass-accepted', bypassHandler);
+			// ANSI-stripped bypass dialog. Default highlight is `❯ 1. No, exit`.
+			feed('WARNING:ClaudeCoderunninginBypassPermissionsmode\n\n❯1.No,exit\n2.Yes,Iaccept\n');
+			// Down arrow goes out immediately to move off the "No, exit" default.
+			expect(mockPtyProcess.write).toHaveBeenCalledWith('\x1b[B');
+			expect(bypassHandler).toHaveBeenCalledTimes(1);
+			// The confirming Enter is split from the Down keystroke by SEND_ENTER_DELAY_MS.
+			expect(mockPtyProcess.write).not.toHaveBeenCalledWith('\r');
+			vi.advanceTimersByTime(SEND_ENTER_DELAY_MS);
+			expect(mockPtyProcess.write).toHaveBeenCalledWith('\r');
+		});
+
+		it("does NOT prematurely fire ready on the dialog's own ❯ selector glyph", async () => {
+			const driver = await makeDriver();
+			const readyHandler = vi.fn();
+			driver.on('ready', readyHandler);
+			// The dialog renders `❯ 1. No, exit`, whose `❯ ` would satisfy
+			// READY_REGEX; the handler clears the rolling buffer so it can't.
+			feed('Bypass Permissions mode\n❯ 1. No, exit\n2. Yes, I accept\n');
+			expect(readyHandler).not.toHaveBeenCalled();
+			// Real editor prompt re-paints after acceptance -> ready fires now.
+			feed('\r❯ Try "edit <filepath>"\n');
+			expect(readyHandler).toHaveBeenCalledTimes(1);
+		});
+
+		it('fires at most once even if the dialog redraws', async () => {
+			const driver = await makeDriver();
+			const bypassHandler = vi.fn();
+			driver.on('bypass-accepted', bypassHandler);
+			feed('❯1.No,exit\n2.Yes,Iaccept\n');
+			feed('❯1.No,exit\n2.Yes,Iaccept\n');
+			expect(bypassHandler).toHaveBeenCalledTimes(1);
+			// Exactly one Down written despite the redraw.
+			expect(mockPtyProcess.write.mock.calls.filter((c) => c[0] === '\x1b[B')).toHaveLength(1);
+		});
+
+		it('does NOT fire on unrelated lines mentioning permissions in passing', async () => {
+			const driver = await makeDriver();
+			const bypassHandler = vi.fn();
+			driver.on('bypass-accepted', bypassHandler);
+			feed('Checking file permissions...\n');
+			feed('Accepted the changes.\n');
+			expect(bypassHandler).not.toHaveBeenCalled();
+		});
+	});
+
 	describe('blind-tap fallback + ready-timeout (g)', () => {
 		beforeEach(() => {
 			vi.useFakeTimers();
