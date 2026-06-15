@@ -23,6 +23,7 @@ import { useClaudeUsageStore } from '../../../stores/claudeUsageStore';
 import { notifyToast } from '../../../stores/notificationStore';
 import { REGEX_AI_TAB } from '../../../utils/sessionIdParser';
 import { generateId } from '../../../utils/ids';
+import { getClaudeTokenMode } from '../../../../shared/claudeTokenMode';
 import type { LogEntry } from '../../../types';
 
 function buildBatchModeBanner(
@@ -86,13 +87,16 @@ export function useAgentClaudeModeResolvedListener(): void {
 						// Detect a meaningful mode flip — this is what triggers the
 						// toast + inline banner. Banners and toasts are framed as
 						// "Adaptive Mode: switched ..." so they only make sense for
-						// sessions that actually have Adaptive Mode on. Sessions that
-						// resolve `interactive` because the user wired `Path` directly
-						// at maestro-p (toggle off), and stale-state cleanup writes,
-						// also flow through this listener but must not fire the
-						// Adaptive-Mode-flavoured UI.
+						// sessions actually running Dynamic mode (the only mode that
+						// auto-switches between Time Limits and API Limits). Pure TUI
+						// (`interactive`) and pure API never switch, so an
+						// `enableMaestroP === true` check wrongly fired the banner on
+						// every pure-TUI agent's first turn. Sessions that resolve
+						// `interactive` because the user wired `Path` directly at
+						// maestro-p, and stale-state cleanup writes, also flow through
+						// this listener but must not fire the Adaptive-Mode UI.
 						const modeChanged = current?.mode !== resolution.mode;
-						const adaptiveModeOn = s.enableMaestroP === true;
+						const adaptiveModeOn = getClaudeTokenMode(s) === 'dynamic';
 						if (
 							adaptiveModeOn &&
 							modeChanged &&
