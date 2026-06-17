@@ -2429,3 +2429,106 @@ describe('pipelinesToYamlByOwnerCwd — owner_agent_id preservation', () => {
 		expect(byCwd.get('/shared')?.yaml).not.toContain('owner_agent_id');
 	});
 });
+
+describe('subscription name stability across node reorder', () => {
+	// Regression: Arrange rebuilds `pipeline.nodes` in a new order. The emitter
+	// used to assign `-chain-N` names by node-array order, so every Arrange+Save
+	// renamed the triggers and reshuffled which trigger owned which name. The
+	// layout store keys saved positions by subscription name, so the rename
+	// silently moved every saved position onto the wrong trigger - "the layout
+	// won't stay arranged" bug. Names must now be derived from each trigger's
+	// existing `subscriptionName`, so a re-save after a reorder is a no-op for
+	// the name->target mapping.
+	function multiTriggerPipeline(triggerOrder: number[]): CuePipeline {
+		const triggers = triggerOrder.map((n) => ({
+			id: `trigger-${n}`,
+			type: 'trigger' as const,
+			position: { x: 0, y: n * 100 },
+			data: {
+				eventType: 'time.scheduled' as const,
+				label: 'Scheduled',
+				config: { schedule_times: ['09:00'] },
+				// The stable identity carried across reloads. trigger 0 owns the
+				// pipeline-named sub; the rest own -chain-N.
+				subscriptionName: n === 0 ? 'multi' : `multi-chain-${n}`,
+			},
+		}));
+		const agents = triggerOrder.map((n) => ({
+			id: `agent-${n}`,
+			type: 'agent' as const,
+			position: { x: 300, y: n * 100 },
+			data: {
+				sessionId: `sess-${n}`,
+				sessionName: `Agent ${n}`,
+				toolType: 'claude-code',
+				nodeKey: `key-${n}`,
+			},
+		}));
+		const edges = triggerOrder.map((n) => ({
+			id: `edge-${n}`,
+			source: `trigger-${n}`,
+			target: `agent-${n}`,
+			mode: 'pass' as const,
+		}));
+		return makePipeline({ name: 'multi', nodes: [...triggers, ...agents], edges });
+	}
+
+	function nameToTarget(pipeline: CuePipeline): Record<string, string | undefined> {
+		const subs = pipelineToYamlSubscriptions(pipeline);
+		const map: Record<string, string | undefined> = {};
+		for (const sub of subs) map[sub.name] = sub.target_node_key;
+		return map;
+	}
+
+	it('preserves each trigger subscription name regardless of node order', () => {
+		const inOrder = multiTriggerPipeline([0, 1, 2, 3]);
+		const reordered = multiTriggerPipeline([2, 0, 3, 1]);
+		// Same name -> same target node in both orderings.
+		expect(nameToTarget(reordered)).toEqual(nameToTarget(inOrder));
+	});
+
+	it('is idempotent across repeated saves after a reorder', () => {
+		const first = nameToTarget(multiTriggerPipeline([0, 1, 2, 3]));
+		const afterReorder = nameToTarget(multiTriggerPipeline([3, 2, 1, 0]));
+		expect(afterReorder).toEqual(first);
+	});
+
+	it('mints a fresh unique name only for a trigger with no prior subscriptionName', () => {
+		const pipeline = multiTriggerPipeline([0, 1]);
+		// A genuinely new trigger dropped on the canvas has no subscriptionName.
+		pipeline.nodes.push(
+			{
+				id: 'trigger-new',
+				type: 'trigger',
+				position: { x: 0, y: 999 },
+				data: {
+					eventType: 'time.scheduled',
+					label: 'Scheduled',
+					config: { schedule_times: ['12:00'] },
+				},
+			},
+			{
+				id: 'agent-new',
+				type: 'agent',
+				position: { x: 300, y: 999 },
+				data: {
+					sessionId: 'sess-new',
+					sessionName: 'Agent New',
+					toolType: 'claude-code',
+					nodeKey: 'key-new',
+				},
+			}
+		);
+		pipeline.edges.push({
+			id: 'edge-new',
+			source: 'trigger-new',
+			target: 'agent-new',
+			mode: 'pass',
+		});
+		const names = pipelineToYamlSubscriptions(pipeline).map((s) => s.name);
+		// Preserved names survive; the new trigger gets a unique, non-colliding name.
+		expect(names).toContain('multi');
+		expect(names).toContain('multi-chain-1');
+		expect(new Set(names).size).toBe(names.length); // all unique
+	});
+});

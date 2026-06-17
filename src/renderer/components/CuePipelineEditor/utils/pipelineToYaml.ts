@@ -289,7 +289,34 @@ export function pipelineToYamlSubscriptions(
 			subNamesForNode.set(nodeId, new Set([name]));
 		}
 	};
-	let chainIndex = 0;
+	// Subscription names double as STABLE IDENTITIES: the layout store keys each
+	// trigger's saved position by its subscription name, and downstream
+	// `source_sub` references point at them. Re-deriving names from node-array
+	// order (the old `chainIndex++` scheme) renamed every trigger whenever
+	// Arrange reordered the nodes, which silently reassigned saved positions to
+	// the wrong triggers - the "layout won't stay arranged" bug. Preserve each
+	// trigger's existing `subscriptionName` across saves and only mint a fresh
+	// `-chain-N` for genuinely new nodes. `usedSubNames` guarantees uniqueness
+	// across both preserved and freshly-minted names (including buildChain's).
+	const usedSubNames = new Set<string>();
+	let freshChainCursor = 0;
+	const generateFreshSubName = (): string => {
+		let candidate: string;
+		do {
+			candidate =
+				freshChainCursor === 0 ? pipeline.name : `${pipeline.name}-chain-${freshChainCursor}`;
+			freshChainCursor++;
+		} while (usedSubNames.has(candidate));
+		usedSubNames.add(candidate);
+		return candidate;
+	};
+	const claimSubName = (preferred?: string): string => {
+		if (typeof preferred === 'string' && preferred.length > 0 && !usedSubNames.has(preferred)) {
+			usedSubNames.add(preferred);
+			return preferred;
+		}
+		return generateFreshSubName();
+	};
 
 	for (const trigger of triggers) {
 		const triggerData = trigger.data as TriggerNodeData;
@@ -315,15 +342,11 @@ export function pipelineToYamlSubscriptions(
 
 		if (workTargets.length === 0) continue;
 
-		const makeSubName = () =>
-			chainIndex === 0 ? pipeline.name : `${pipeline.name}-chain-${chainIndex}`;
-
 		const allAgents = workTargets.every((n) => n.type === 'agent');
 
 		if (workTargets.length === 1) {
 			// === Single target: agent or command ===
-			const subName = makeSubName();
-			chainIndex++;
+			const subName = claimSubName(triggerData.subscriptionName);
 
 			const sub: CueSubscription = {
 				name: subName,
@@ -350,16 +373,15 @@ export function pipelineToYamlSubscriptions(
 				nodeMap,
 				visited,
 				subNamesForNode,
+				usedSubNames,
 				ownerOut
 			);
-			chainIndex = subscriptions.length;
 		} else if (allAgents) {
 			// === Fan-out to agents only — canonical `fan_out` shape ===
 			// The engine's fan_out array addresses sessions by name, which
 			// only makes sense for agent targets (commands have no session
 			// identity of their own). One sub handles N agents at runtime.
-			const subName = makeSubName();
-			chainIndex++;
+			const subName = claimSubName(triggerData.subscriptionName);
 
 			const sub: CueSubscription = {
 				name: subName,
@@ -459,10 +481,10 @@ export function pipelineToYamlSubscriptions(
 					nodeMap,
 					visited,
 					subNamesForNode,
+					usedSubNames,
 					ownerOut
 				);
 			}
-			chainIndex = subscriptions.length;
 		} else {
 			// === Per-branch fan-out: any target is a command ===
 			// `fan_out` can't carry command targets — the engine addresses
@@ -472,9 +494,12 @@ export function pipelineToYamlSubscriptions(
 			// they each arm with the engine. On reload, `yamlToPipeline`
 			// groups branch subs that share `pipeline_name` + identical
 			// trigger event config back onto a single visual trigger node.
+			let firstBranch = true;
 			for (const target of workTargets) {
-				const branchName = makeSubName();
-				chainIndex++;
+				// Only the first branch can inherit the shared trigger node's
+				// stored subscription name; the rest are genuinely new subs.
+				const branchName = claimSubName(firstBranch ? triggerData.subscriptionName : undefined);
+				firstBranch = false;
 
 				const branchSub: CueSubscription = {
 					name: branchName,
@@ -499,9 +524,9 @@ export function pipelineToYamlSubscriptions(
 					nodeMap,
 					visited,
 					subNamesForNode,
+					usedSubNames,
 					ownerOut
 				);
-				chainIndex = subscriptions.length;
 			}
 		}
 	}
@@ -567,10 +592,30 @@ function buildChain(
 	nodeMap: Map<string, PipelineNode>,
 	visited: Set<string>,
 	subNamesForNode: Map<string, Set<string>>,
+	usedSubNames: Set<string>,
 	ownerOut?: Map<CueSubscription, SubscriptionOwner>
 ): void {
 	const fromOutgoing = outgoing.get(fromNode.id) ?? [];
 	if (fromOutgoing.length === 0) return;
+
+	// Mint a unique chain-sub name, preferring a stable identity (a command
+	// node's own name) and falling back to the next free `-chain-N`. Shares
+	// `usedSubNames` with the trigger loop so a freshly-minted chain name can
+	// never collide with a preserved trigger name (or vice versa).
+	const claimChainName = (preferred?: string): string => {
+		if (typeof preferred === 'string' && preferred.length > 0 && !usedSubNames.has(preferred)) {
+			usedSubNames.add(preferred);
+			return preferred;
+		}
+		let i = subscriptions.length;
+		let candidate: string;
+		do {
+			candidate = `${pipelineName}-chain-${i}`;
+			i++;
+		} while (usedSubNames.has(candidate));
+		usedSubNames.add(candidate);
+		return candidate;
+	};
 
 	const targets = fromOutgoing
 		.map((e) => nodeMap.get(e.target))
@@ -597,15 +642,13 @@ function buildChain(
 			return sourceNode?.type === 'agent' || sourceNode?.type === 'command';
 		});
 
-		const fallbackSubName = `${pipelineName}-chain-${subscriptions.length}`;
-
 		let sub: CueSubscription;
 
 		if (target.type === 'command') {
 			const cmdData = target.data as CommandNodeData;
 			const cmd = commandNodeDataToCueCommand(cmdData);
 			sub = {
-				name: cmdData.name || fallbackSubName,
+				name: claimChainName(cmdData.name),
 				event: 'agent.completed',
 				enabled: true,
 				prompt: cmd?.mode === 'shell' ? cmd.shell : cmd?.mode === 'cli' ? cmd.cli.target : '',
@@ -628,7 +671,7 @@ function buildChain(
 			const shouldInjectSource = includedEdges.length > 0;
 
 			sub = {
-				name: fallbackSubName,
+				name: claimChainName(),
 				event: 'agent.completed',
 				enabled: true,
 				prompt: shouldInjectSource
@@ -733,6 +776,7 @@ function buildChain(
 			nodeMap,
 			visited,
 			subNamesForNode,
+			usedSubNames,
 			ownerOut
 		);
 	}
