@@ -384,13 +384,35 @@ export function useBatchedSessionUpdates(
 								if (!tabUsageDelta) return tab;
 
 								const existing = tab.usageStats;
+								// An "output-only" delta carries new output tokens but zero
+								// input/cache. Copilot CLI streams these per-turn (each
+								// assistant.message reports only outputTokens; the real
+								// input/cache/context snapshot lands once on exit via disk
+								// reconciliation). Replacing input/cache with these zeros would
+								// wipe the reconciled context-window gauge to 0 the moment the
+								// next turn starts producing output. Preserve the prior snapshot
+								// for output-only deltas; a real usage report (any input or
+								// cache) still replaces it. No legitimate full snapshot consumes
+								// zero input AND zero cache while producing output, so this is
+								// safe for every agent.
+								const isOutputOnlyDelta =
+									tabUsageDelta.inputTokens === 0 &&
+									tabUsageDelta.cacheReadInputTokens === 0 &&
+									tabUsageDelta.cacheCreationInputTokens === 0 &&
+									tabUsageDelta.outputTokens > 0;
 								return {
 									...tab,
 									usageStats: {
-										inputTokens: tabUsageDelta.inputTokens, // Current (not accumulated)
-										cacheReadInputTokens: tabUsageDelta.cacheReadInputTokens,
-										cacheCreationInputTokens: tabUsageDelta.cacheCreationInputTokens,
-										contextWindow: tabUsageDelta.contextWindow,
+										inputTokens: isOutputOnlyDelta
+											? (existing?.inputTokens ?? 0)
+											: tabUsageDelta.inputTokens, // Current (not accumulated)
+										cacheReadInputTokens: isOutputOnlyDelta
+											? (existing?.cacheReadInputTokens ?? 0)
+											: tabUsageDelta.cacheReadInputTokens,
+										cacheCreationInputTokens: isOutputOnlyDelta
+											? (existing?.cacheCreationInputTokens ?? 0)
+											: tabUsageDelta.cacheCreationInputTokens,
+										contextWindow: tabUsageDelta.contextWindow || existing?.contextWindow || 0,
 										outputTokens: tabUsageDelta.outputTokens, // Current (not accumulated)
 										totalCostUsd: (existing?.totalCostUsd || 0) + tabUsageDelta.totalCostUsd,
 										reasoningTokens: tabUsageDelta.reasoningTokens,
