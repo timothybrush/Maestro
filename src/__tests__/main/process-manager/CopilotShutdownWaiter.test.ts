@@ -161,6 +161,66 @@ describe('CopilotShutdownWaiter', () => {
 			expect(result).toBe('timeout');
 		});
 
+		it('ignores stale shutdown markers from prior turns of a resumed session', async () => {
+			// Regression: a resumed Copilot session appends every turn to one
+			// events.jsonl, so the file already holds shutdown markers from earlier
+			// turns. Matching one of those returned "observed" instantly and flipped
+			// the tab to idle while this turn's subagents were still working - the
+			// exact bug where Copilot's "I'm waiting on the X agent..." narration
+			// got surfaced as the final answer. The current turn (after the last
+			// session.resume) has no shutdown yet, so we must keep waiting.
+			await fs.writeFile(
+				eventsPath,
+				[
+					JSON.stringify({ type: 'session.start', data: { sessionId: AGENT_SESSION_ID } }),
+					JSON.stringify({ type: 'session.shutdown', data: { currentTokens: 100 } }),
+					JSON.stringify({ type: 'session.resume', data: { sessionId: AGENT_SESSION_ID } }),
+					JSON.stringify({
+						type: 'assistant.message',
+						data: { content: "I'm waiting on the specialist agent to finish.", toolRequests: [] },
+					}),
+				].join('\n') + '\n'
+			);
+
+			const result = await waitForCopilotShutdown(AGENT_SESSION_ID, {
+				configDir,
+				maxWaitMs: 2000,
+				inactivityMs: 150,
+				pollIntervalMs: 25,
+			});
+
+			// Never observed the current turn's shutdown — it goes idle only via the
+			// inactivity safety valve, not the stale marker.
+			expect(result).toBe('inactive');
+		});
+
+		it("observes the CURRENT turn's shutdown even when prior-turn markers exist", async () => {
+			await fs.writeFile(
+				eventsPath,
+				[
+					JSON.stringify({ type: 'session.start', data: { sessionId: AGENT_SESSION_ID } }),
+					JSON.stringify({ type: 'session.shutdown', data: { currentTokens: 100 } }),
+					JSON.stringify({ type: 'session.resume', data: { sessionId: AGENT_SESSION_ID } }),
+				].join('\n') + '\n'
+			);
+
+			const waitPromise = waitForCopilotShutdown(AGENT_SESSION_ID, {
+				configDir,
+				maxWaitMs: 2000,
+				inactivityMs: 1500,
+				pollIntervalMs: 25,
+			});
+
+			setTimeout(() => {
+				void fs.appendFile(
+					eventsPath,
+					JSON.stringify({ type: 'session.shutdown', data: { currentTokens: 200 } }) + '\n'
+				);
+			}, 60);
+
+			await expect(waitPromise).resolves.toBe('observed');
+		});
+
 		it('accepts shutdown markers with whitespace between key and value', async () => {
 			await fs.writeFile(
 				eventsPath,
@@ -341,6 +401,56 @@ describe('CopilotShutdownWaiter', () => {
 			const result = await readCopilotFinalAnswer(AGENT_SESSION_ID, configDir);
 
 			expect(result).toEqual({ content: 'real parent final answer' });
+		});
+
+		it('ignores answers from prior turns of a resumed session', async () => {
+			// Regression: with a resumed session, the events.jsonl holds the previous
+			// turn's final answer. If the current turn (after the last session.resume)
+			// produced only tool calls and no final text yet, we must return null
+			// rather than resurfacing the stale prior-turn answer as this turn's
+			// conclusion.
+			await fs.writeFile(
+				eventsPath,
+				[
+					JSON.stringify({ type: 'session.start', data: { sessionId: AGENT_SESSION_ID } }),
+					JSON.stringify({
+						type: 'assistant.message',
+						data: { content: 'Stale answer from the previous turn.', toolRequests: [] },
+					}),
+					JSON.stringify({ type: 'session.shutdown', data: { currentTokens: 1 } }),
+					JSON.stringify({ type: 'session.resume', data: { sessionId: AGENT_SESSION_ID } }),
+					JSON.stringify({
+						type: 'assistant.message',
+						data: { content: '', toolRequests: [{ name: 'shell', toolCallId: 'tc1' }] },
+					}),
+				].join('\n') + '\n'
+			);
+
+			const result = await readCopilotFinalAnswer(AGENT_SESSION_ID, configDir);
+
+			expect(result).toBeNull();
+		});
+
+		it("returns the current turn's answer, not an earlier turn's, after a resume", async () => {
+			await fs.writeFile(
+				eventsPath,
+				[
+					JSON.stringify({
+						type: 'assistant.message',
+						data: { content: 'Old turn answer.', toolRequests: [] },
+					}),
+					JSON.stringify({ type: 'session.shutdown', data: { currentTokens: 1 } }),
+					JSON.stringify({ type: 'session.resume', data: { sessionId: AGENT_SESSION_ID } }),
+					JSON.stringify({
+						type: 'session.task_complete',
+						data: { summary: "This turn's real conclusion." },
+					}),
+				].join('\n') + '\n'
+			);
+
+			const result = await readCopilotFinalAnswer(AGENT_SESSION_ID, configDir);
+
+			expect(result).toEqual({ content: "This turn's real conclusion." });
 		});
 
 		it('skips session.task_complete events with empty summary', async () => {
@@ -525,6 +635,59 @@ describe('CopilotShutdownWaiter', () => {
 				cacheCreationInputTokens: 0,
 				reasoningTokens: 0,
 			});
+		});
+
+		it("reads the CURRENT turn's shutdown usage, not a prior turn's, after a resume", async () => {
+			// Regression: a resumed session accumulates one shutdown per turn. The
+			// gauge must reflect this turn's snapshot (after the last session.resume),
+			// not an earlier turn's stale numbers.
+			await fs.writeFile(
+				eventsPath,
+				[
+					JSON.stringify({
+						type: 'session.shutdown',
+						data: { currentTokens: 1000, modelMetrics: { m: { usage: { outputTokens: 10 } } } },
+					}),
+					JSON.stringify({ type: 'session.resume', data: { sessionId: AGENT_SESSION_ID } }),
+					JSON.stringify({
+						type: 'session.shutdown',
+						data: { currentTokens: 5000, modelMetrics: { m: { usage: { outputTokens: 50 } } } },
+					}),
+				].join('\n') + '\n'
+			);
+
+			const result = await readCopilotShutdownUsage(AGENT_SESSION_ID, configDir);
+
+			expect(result).toEqual({
+				inputTokens: 5000,
+				outputTokens: 50,
+				cacheReadInputTokens: 0,
+				cacheCreationInputTokens: 0,
+				reasoningTokens: 0,
+			});
+		});
+
+		it('returns null when only prior-turn shutdowns precede the current resume', async () => {
+			// The current turn (after the last session.resume) has not written its
+			// shutdown yet, so there is no current-segment usage to report.
+			await fs.writeFile(
+				eventsPath,
+				[
+					JSON.stringify({
+						type: 'session.shutdown',
+						data: { currentTokens: 1000, modelMetrics: { m: { usage: { outputTokens: 10 } } } },
+					}),
+					JSON.stringify({ type: 'session.resume', data: { sessionId: AGENT_SESSION_ID } }),
+					JSON.stringify({
+						type: 'assistant.message',
+						data: { content: 'working', toolRequests: [] },
+					}),
+				].join('\n') + '\n'
+			);
+
+			const result = await readCopilotShutdownUsage(AGENT_SESSION_ID, configDir);
+
+			expect(result).toBeNull();
 		});
 	});
 

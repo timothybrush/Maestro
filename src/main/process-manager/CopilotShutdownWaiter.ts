@@ -16,6 +16,55 @@ export { resolveCopilotEventsPath };
 // colon since JSON serializers differ on whitespace.
 const SHUTDOWN_PATTERNS = ['"type":"session.shutdown"', '"type": "session.shutdown"'];
 
+// Markers that begin a fresh turn within Copilot's append-only events.jsonl.
+// A resumed session writes exactly one of these at the start of every spawn:
+// `session.start` for the first turn, `session.resume` for each subsequent
+// turn. Everything after the LAST such marker belongs to the current turn.
+const SEGMENT_BOUNDARY_PATTERNS = [
+	'"type":"session.resume"',
+	'"type": "session.resume"',
+	'"type":"session.start"',
+	'"type": "session.start"',
+];
+
+/**
+ * Find the offset just past the LAST turn-boundary line in `content`, or 0 when
+ * none is present.
+ *
+ * Copilot appends every turn of a resumed session to a single `events.jsonl`,
+ * so the file accumulates `session.shutdown` markers, final answers, and usage
+ * snapshots from PRIOR turns. Scanning the whole file would match a stale
+ * shutdown from an earlier turn (defeating the wait entirely) or surface an
+ * earlier turn's answer. Scoping every read to the current turn's segment - the
+ * bytes after the last `session.resume`/`session.start` - keeps the logic
+ * looking only at what the in-flight turn has produced.
+ *
+ * Returns 0 (whole content) when no boundary is found, e.g. a brand-new
+ * first-turn file whose `session.start` hasn't landed yet, or an incremental
+ * remote tail that doesn't include the boundary line (it lives before the tail's
+ * starting offset, so the entire tail is already inside the current segment).
+ */
+function currentSegmentOffset(content: string): number {
+	let marker = -1;
+	for (const pattern of SEGMENT_BOUNDARY_PATTERNS) {
+		const idx = content.lastIndexOf(pattern);
+		if (idx > marker) marker = idx;
+	}
+	if (marker < 0) return 0;
+	const lineEnd = content.indexOf('\n', marker);
+	return lineEnd < 0 ? content.length : lineEnd + 1;
+}
+
+/** Slice `content` down to the current turn's segment. See `currentSegmentOffset`. */
+function sliceToCurrentSegment(content: string): string {
+	return content.slice(currentSegmentOffset(content));
+}
+
+/** True when a `session.shutdown` marker exists in `content`'s current turn segment. */
+function contentContainsShutdownInCurrentSegment(content: string): boolean {
+	return contentContainsShutdown(sliceToCurrentSegment(content));
+}
+
 const DEFAULT_POLL_INTERVAL_MS = 500;
 // Remote polling has no SSH connection multiplexing, so every poll is a fresh
 // ssh handshake. We adapt the cadence to the remote file's activity: poll
@@ -152,7 +201,11 @@ async function waitForCopilotShutdownLocal(
 			// File doesn't exist yet or transiently unreadable - fall through.
 		}
 
-		if (content && contentContainsShutdown(content)) {
+		// Only the CURRENT turn's shutdown counts. A resumed session's
+		// events.jsonl carries stale shutdown markers from every prior turn;
+		// matching one of those would flip the tab to idle the instant this turn
+		// starts, while subagents are still working.
+		if (content && contentContainsShutdownInCurrentSegment(content)) {
 			return 'observed';
 		}
 
@@ -214,9 +267,13 @@ async function waitForCopilotShutdownRemote(
 			everSawFile = true;
 			const tail = result.data ?? '';
 
-			// Scan the full returned tail (including any not-yet-terminated final
-			// line) so an unterminated shutdown line is still detected promptly.
-			if (contentContainsShutdown(tail)) {
+			// Scan the current turn's segment of the returned tail (including any
+			// not-yet-terminated final line) so an unterminated shutdown line is
+			// still detected promptly. The first poll reads from offset 0 and sees
+			// the whole accumulated file, so it must skip stale shutdown markers
+			// that precede this turn's `session.resume`; later polls only fetch new
+			// bytes past that boundary, so their whole tail is already in-segment.
+			if (contentContainsShutdownInCurrentSegment(tail)) {
 				return 'observed';
 			}
 
@@ -283,8 +340,10 @@ export async function readCopilotFinalAnswer(
 	const content = await readCopilotEventsContent(agentSessionId, sshRemote, configDir);
 	if (content === null) return null;
 
+	// Scope to the current turn so a resumed session's earlier-turn answers
+	// can't be returned as this turn's conclusion. See `currentSegmentOffset`.
 	let latest: string | null = null;
-	for (const line of content.split(/\r?\n/)) {
+	for (const line of sliceToCurrentSegment(content).split(/\r?\n/)) {
 		const trimmed = line.trim();
 		if (!trimmed) continue;
 		// Cheap pre-filter: skip lines that can't be either event type.
@@ -367,8 +426,11 @@ export async function readCopilotShutdownUsage(
 		>;
 	}
 
+	// Scope to the current turn's segment so the gauge reflects this turn's
+	// shutdown snapshot, not a stale one from an earlier turn of a resumed
+	// session. See `currentSegmentOffset`.
 	let latest: ShutdownData | null = null;
-	for (const line of content.split(/\r?\n/)) {
+	for (const line of sliceToCurrentSegment(content).split(/\r?\n/)) {
 		const trimmed = line.trim();
 		if (!trimmed || !trimmed.includes('"session.shutdown"')) continue;
 		try {
