@@ -1128,6 +1128,17 @@ function MaestroConsoleInner() {
 		[activeSession?.inputMode, activeSession?.shellCwd, activeSession?.cwd]
 	);
 
+	// Open a file path clicked in the Git Log / Git Diff viewers as a preview tab.
+	// The viewer dismisses itself first (via its own onClose); here we just read
+	// and open the file. The path arrives absolute (resolved against the viewer's
+	// cwd) so handleFileClick uses it verbatim and still honors SSH remotes.
+	const handleOpenGitFile = useCallback(
+		(absolutePath: string, fileName: string) => {
+			void handleFileClick({ name: fileName, type: 'file' }, absolutePath);
+		},
+		[handleFileClick]
+	);
+
 	// Auto-focus the AI input box when switching from terminal to AI mode
 	const prevInputModeRef = useRef(activeSession?.inputMode);
 	const shouldFocusOnModeSwitch =
@@ -3053,6 +3064,7 @@ function MaestroConsoleInner() {
 					gitViewerCwd={gitViewerCwd}
 					onCloseGitDiff={handleCloseGitDiff}
 					onCloseGitLog={handleCloseGitLog}
+					onOpenGitFile={handleOpenGitFile}
 					onCloseAutoRunSetup={handleCloseAutoRunSetup}
 					onAutoRunFolderSelected={handleAutoRunFolderSelected}
 					onCloseBatchRunner={handleCloseBatchRunner}

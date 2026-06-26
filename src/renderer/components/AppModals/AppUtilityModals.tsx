@@ -187,6 +187,9 @@ export interface AppUtilityModalsProps {
 	gitLogOpen: boolean;
 	onCloseGitLog: () => void;
 
+	// Shared by both git viewers: open a clicked file path as a preview tab.
+	onOpenGitFile?: (absolutePath: string, fileName: string) => void;
+
 	// AutoRunSetupModal
 	autoRunSetupModalOpen: boolean;
 	onCloseAutoRunSetup: () => void;
@@ -418,6 +421,7 @@ export const AppUtilityModals = memo(function AppUtilityModals({
 	// GitLogViewer
 	gitLogOpen,
 	onCloseGitLog,
+	onOpenGitFile,
 	// AutoRunSetupModal
 	autoRunSetupModalOpen,
 	onCloseAutoRunSetup,
@@ -628,6 +632,7 @@ export const AppUtilityModals = memo(function AppUtilityModals({
 						cwd={gitViewerCwd}
 						theme={theme}
 						onClose={onCloseGitDiff}
+						onOpenFile={onOpenGitFile}
 					/>
 				</Suspense>
 			)}
@@ -639,6 +644,7 @@ export const AppUtilityModals = memo(function AppUtilityModals({
 						cwd={gitViewerCwd}
 						theme={theme}
 						onClose={onCloseGitLog}
+						onOpenFile={onOpenGitFile}
 						sshRemoteId={
 							activeSession?.sshRemoteId ||
 							(activeSession?.sessionSshRemoteConfig?.enabled
