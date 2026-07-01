@@ -247,6 +247,22 @@ export class CueEngine {
 					durationMs: result.durationMs,
 					status: result.status,
 				});
+				// Conductor level credit: only autonomous AI time advances the
+				// podium (badge progression + leaderboard, which read the same
+				// cumulativeTimeMs, so there is no drift). Command nodes are
+				// deterministic shell steps, not agent reasoning, so they never
+				// credit. Each run is floored to whole minutes: a sub-minute agent
+				// run yields 0, matching Auto Run's minute-granularity accrual and
+				// keeping trivial/quick automations off the podium.
+				if (taskKind !== 'command_node' && result.status === 'completed') {
+					const creditMs = Math.floor(result.durationMs / 60000) * 60000;
+					if (creditMs > 0) {
+						this.meteredOnLog('debug', '[CUE] Conductor time credit', {
+							type: 'conductorTimeCredit',
+							creditMs,
+						});
+					}
+				}
 				// Carry forwarded outputs from the triggering event through to the
 				// completion notification so downstream agents can access them via
 				// per-source template variables ({{CUE_FORWARDED_<NAME>}}).
