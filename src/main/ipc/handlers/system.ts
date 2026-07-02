@@ -425,7 +425,17 @@ export function registerSystemHandlers(deps: SystemHandlerDependencies): void {
 	// we kick it off and return immediately so it never blocks the update check,
 	// and sendCheckin swallows all failures internally.
 	ipcMain.handle('updates:checkin', async () => {
-		void sendCheckin(app);
+		// Resolve the active theme id best-effort so we can measure theme
+		// popularity. The store is seeded with the default ('dracula'), so this
+		// returns a value for every user. Never let it block or throw the ping.
+		let theme: string | undefined;
+		try {
+			const value = settingsStore.get('activeThemeId' as keyof MaestroSettings);
+			if (typeof value === 'string') theme = value;
+		} catch {
+			theme = undefined;
+		}
+		void sendCheckin(app, theme);
 	});
 
 	// Set whether to allow prerelease updates (for electron-updater)

@@ -66,10 +66,37 @@ describe('checkin', () => {
 		const body = JSON.parse(opts.body as string);
 		expect(body.guid).toMatch(UUID_RE);
 		expect(body.version).toBe('1.2.3');
+		// platform/arch come straight from process and are always present.
+		expect(body.platform).toBe(process.platform);
+		expect(body.arch).toBe(process.arch);
 
 		// Persisted to userData/checkin-id.json with the same id.
 		const raw = await fsp.readFile(path.join(userDataDir, 'checkin-id.json'), 'utf-8');
 		expect(JSON.parse(raw).installId).toBe(body.guid);
+	});
+
+	it('includes theme when a non-empty id is passed', async () => {
+		const { sendCheckin } = await loadModule();
+		await sendCheckin(makeApp(), 'monokai');
+
+		const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+		expect(body.theme).toBe('monokai');
+	});
+
+	it('omits theme when unresolved (undefined/null/empty)', async () => {
+		const { sendCheckin } = await loadModule();
+		await sendCheckin(makeApp(), null);
+		await sendCheckin(makeApp(), '');
+		await sendCheckin(makeApp());
+
+		for (const call of mockFetch.mock.calls) {
+			const body = JSON.parse(call[1].body);
+			expect('theme' in body).toBe(false);
+			// guid/version/platform/arch still present on every ping.
+			expect(body.guid).toMatch(UUID_RE);
+			expect(body.platform).toBe(process.platform);
+			expect(body.arch).toBe(process.arch);
+		}
 	});
 
 	it('reuses the persisted UUID across process restarts', async () => {

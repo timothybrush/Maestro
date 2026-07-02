@@ -2,10 +2,12 @@
  * Anonymous check-in ping for DAU/MAU measurement.
  *
  * Alongside the GitHub update check, we send a lightweight, best-effort POST to
- * runmaestro.ai so we can count distinct installs per day / per 30 days. The
- * payload is intentionally minimal - a stable, randomly-generated install id and
- * the app version. Nothing here fingerprints the machine or the user: the id is
- * a UUID we generate once and persist in userData, not a hardware identifier.
+ * runmaestro.ai so we can count distinct installs per day / per 30 days and see
+ * which themes and platforms are in use. The payload is intentionally minimal - a
+ * stable, randomly-generated install id, the app version, the active theme id,
+ * and the OS platform + CPU arch. Nothing here fingerprints the machine or the
+ * user: the id is a UUID we generate once and persist in userData, not a hardware
+ * identifier, and platform/arch are coarse build-target buckets.
  *
  * This is gated by the same "check for updates" preference as the update check
  * itself (see the renderer's startup effect). If the user opted out, this is
@@ -74,11 +76,26 @@ async function getOrCreateInstallId(app: App): Promise<string> {
  * Fire the check-in ping. Best-effort: resolves once the request settles (or the
  * timeout fires) but never throws, so callers can `void sendCheckin(app)` and
  * move on. The caller is responsible for the opt-out gate.
+ *
+ * `theme` is the active theme id (e.g. `dracula`), resolved by the caller from
+ * the settings store. It is optional and best-effort: a missing/empty value is
+ * simply omitted from the payload rather than sent as null, and never blocks the
+ * ping. `platform`/`arch` come straight from `process` and are always included.
  */
-export async function sendCheckin(app: App): Promise<void> {
+export async function sendCheckin(app: App, theme?: string | null): Promise<void> {
 	try {
 		const guid = await getOrCreateInstallId(app);
 		const version = app.getVersion();
+
+		const body: Record<string, unknown> = {
+			guid,
+			version,
+			platform: process.platform,
+			arch: process.arch,
+		};
+		if (typeof theme === 'string' && theme.length > 0) {
+			body.theme = theme;
+		}
 
 		const controller = new AbortController();
 		const timeout = setTimeout(() => controller.abort(), CHECKIN_TIMEOUT_MS);
@@ -86,7 +103,7 @@ export async function sendCheckin(app: App): Promise<void> {
 			await fetch(CHECKIN_ENDPOINT, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ guid, version }),
+				body: JSON.stringify(body),
 				signal: controller.signal,
 			});
 		} finally {
