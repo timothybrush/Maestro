@@ -472,11 +472,19 @@ async function spawnClaudeAgent(
 
 	// Resolve the per-agent Claude token source through the SAME shared decision
 	// core the desktop uses, so CLI Auto Run / batch / `send` honor API vs TUI vs
-	// Dynamic identically. Absent fields collapse to API via getClaudeTokenMode.
-	const tokenMode = getClaudeTokenMode(
-		{ enableMaestroP: tokenSource.enableMaestroP, maestroPMode: tokenSource.maestroPMode },
-		{ sshEnabled }
-	);
+	// Dynamic identically.
+	//
+	// Default is API (`claude --print`): an UNCONFIGURED agent must NOT be flipped
+	// to maestro-p. That's doubly important for SSH here - the CLI can't probe the
+	// remote, and maestro-p may not be installed there, so an optimistic TUI
+	// default would try to exec a missing binary and fail the turn. We therefore
+	// do NOT pass the `{ sshEnabled }` default-flip option (which the desktop uses
+	// only because it has a live remote maestro-p probe as a safety net). Only an
+	// EXPLICIT TUI/Dynamic selection routes through maestro-p.
+	const tokenMode = getClaudeTokenMode({
+		enableMaestroP: tokenSource.enableMaestroP,
+		maestroPMode: tokenSource.maestroPMode,
+	});
 	const spawnDecision = resolveClaudeSpawnModeCore(
 		{
 			agent: def

@@ -2105,9 +2105,7 @@ Some text with [x] in it that's not a checkbox
 			mockGetAgentCustomPath.mockReturnValue('/opt/local/claude');
 			mockWrapSpawnWithSsh.mockResolvedValue(sshWrapResult({ args: ['remotehost'] }));
 
-			// Explicit API token source so the remote command stays `claude`. (An
-			// unconfigured SSH agent now defaults to the remote maestro-p TUI to
-			// match the desktop - covered by the dedicated test below.)
+			// Explicit API token source so the remote command stays `claude`.
 			const p = spawnAgent('claude-code', '/p', 'hi', undefined, {
 				sshRemoteConfig: { enabled: true, remoteId: 'r1' },
 				enableMaestroP: false,
@@ -2120,6 +2118,25 @@ Some text with [x] in it that's not a checkbox
 			expect(wrapConfig.agentBinaryName).toBe('claude');
 			// local `command` may be a resolved path, but agentBinaryName is what
 			// the wrapper actually uses for the remote invocation.
+		});
+
+		it('defaults an UNCONFIGURED SSH agent to claude --print, NOT the remote TUI', async () => {
+			// The CLI cannot probe the remote for maestro-p and it may not be
+			// installed there, so an agent that never chose a token source must
+			// default to API (claude) over SSH - never optimistically exec maestro-p.
+			mockWrapSpawnWithSsh.mockResolvedValue(sshWrapResult({ args: ['remotehost'] }));
+
+			const p = spawnAgent('claude-code', '/p', 'hi', undefined, {
+				sshRemoteConfig: { enabled: true, remoteId: 'r1' },
+				// enableMaestroP intentionally omitted (unconfigured).
+			});
+			await driveSpawnToCompletion(p, 0, CLAUDE_OK());
+
+			const [wrapConfig] = mockWrapSpawnWithSsh.mock.calls[0] as [
+				{ agentBinaryName?: string; args: string[] },
+			];
+			expect(wrapConfig.agentBinaryName).toBe('claude');
+			expect(wrapConfig.agentBinaryName).not.toBe('maestro-p');
 		});
 
 		it('runs maestro-p on the remote host when the agent selected the TUI token source', async () => {
