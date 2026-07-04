@@ -81,7 +81,7 @@ This synopsis renders in Maestro's full markdown surface, not a plain terminal. 
 - **LaTeX math (KaTeX)** - display math via `$$ ... $$` on its own line; inline math via `\( ... \)`. Do NOT use single `$...$` (it renders literally, so `$5` stays `$5`). Use only when a real formula or metric expression is the point (throughput, ratios, percentages as expressions).
 - **GitHub alert callouts** - a blockquote whose first line is `> [!NOTE]` (or `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]`, `[!CAUTION]`) renders as a colored callout. Use sparingly to flag a genuine blocker, risk, or standout win - not for every bullet.
 - **Links** - link to files, PRs, or issues when a concrete reference helps the reader jump to the source.
-- **Inline SVG** - a raw `<svg>...</svg>` block renders inline (sanitized). Reserve it for a small custom visual that Mermaid and tables genuinely cannot express; prefer the higher-level tools first.
+- **Inline SVG** - a raw `<svg>...</svg>` block renders inline (sanitized). Reserve it for a small custom visual that Mermaid and tables genuinely cannot express; prefer the higher-level tools first. Keep the whole thing contiguous: **no blank lines between `<svg>` and `</svg>`**, or the parser closes the HTML block at the first empty line and the SVG breaks (part renders incomplete, the rest shows as a code block).
 
 Restraint is the rule: a synopsis that is mostly clean prose with one well-chosen table or diagram reads far better than one crowded with visuals.
 
