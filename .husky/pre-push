@@ -28,10 +28,30 @@ z40=0000000000000000000000000000000000000000
 # For the intentional release promotion, re-run with:
 #   MAESTRO_ALLOW_RC_TO_MAIN=1 git push ...
 rc_ref=$(git rev-parse --verify --quiet refs/remotes/origin/rc)
-if [ -n "$rc_ref" ] && [ "${MAESTRO_ALLOW_RC_TO_MAIN:-0}" != "1" ]; then
+if [ -n "$rc_ref" ]; then
 	while read -r local_ref local_sha remote_ref remote_sha; do
 		[ "$remote_ref" = "refs/heads/main" ] || continue
 		case "$local_sha" in "$z40" | "") continue ;; esac
+
+		# Check 1: main must never carry an -RC version. NOT bypassable, not even
+		# by MAESTRO_ALLOW_RC_TO_MAIN. This is what separates an accident from an
+		# intentional release: an accidental fast-forward drags rc's package.json
+		# along and lands main on 0.18.x-RC, while the documented promotion bumps
+		# to the GA version on the promotion branch before merging.
+		pushed_version=$(git show "$local_sha:package.json" 2>/dev/null | sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
+		case "$pushed_version" in
+			*-RC* | *-rc*)
+				echo "[pre-push] BLOCKED: main must never carry a release-candidate version."
+				echo "[pre-push]   package.json in the pushed commit reads $pushed_version."
+				echo "[pre-push]   If this is the release promotion, bump the version to its GA"
+				echo "[pre-push]   value on the promotion branch before merging into main."
+				exit 1
+				;;
+		esac
+
+		# Check 2: main must not absorb the rc line. Bypassable for the planned
+		# promotion via MAESTRO_ALLOW_RC_TO_MAIN=1, since check 1 still holds.
+		[ "${MAESTRO_ALLOW_RC_TO_MAIN:-0}" = "1" ] && continue
 		# Commits this push adds to main, and how many of them rc already has.
 		# NOTE: use explicit "^rev" exclusions, never repeated "--not". A second
 		# --not toggles the sense back to positive, so "--not A --not B" INCLUDES
