@@ -4,7 +4,7 @@
  * Platform detection now uses window.maestro.platform (Electron preload bridge)
  * instead of navigator.userAgent. Since isMac() is a function call (not a
  * module-level constant), we can simply set window.maestro.platform before
- * each test — no dynamic imports needed.
+ * each test - no dynamic imports needed.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -16,6 +16,7 @@ import {
 	formatKey,
 	formatShortcutKeys,
 	formatMetaKey,
+	formatMetaKeyName,
 	formatEnterToSend,
 	formatEnterToSendTooltip,
 	isMacOS,
@@ -177,6 +178,12 @@ describe('shortcutFormatter', () => {
 		describe('formatMetaKey()', () => {
 			it('returns ⌘ on macOS', () => {
 				expect(formatMetaKey()).toBe('⌘');
+			});
+		});
+
+		describe('formatMetaKeyName()', () => {
+			it('returns the spelled-out Command on macOS', () => {
+				expect(formatMetaKeyName()).toBe('Command');
 			});
 		});
 
@@ -352,6 +359,12 @@ describe('shortcutFormatter', () => {
 		describe('formatMetaKey()', () => {
 			it('returns Ctrl on Windows/Linux', () => {
 				expect(formatMetaKey()).toBe('Ctrl');
+			});
+		});
+
+		describe('formatMetaKeyName()', () => {
+			it('returns Ctrl on Windows/Linux', () => {
+				expect(formatMetaKeyName()).toBe('Ctrl');
 			});
 		});
 

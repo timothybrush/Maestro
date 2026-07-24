@@ -4,6 +4,7 @@ import { getInitialRenameValue, moveActiveUnifiedTabToEdge } from '../../utils/t
 import { useModalStore } from '../../stores/modalStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { isActiveOutputSearchOpen } from '../../utils/outputSearch';
+import { isMacOSPlatform } from '../../utils/platformUtils';
 import { editClipboardImage } from '../../components/ImageAnnotator/editClipboardImage';
 
 // Font size keyboard shortcut constants
@@ -172,7 +173,7 @@ export function useMainKeyboardHandler(): UseMainKeyboardHandlerReturn {
 			// On Windows/Linux, Ctrl doubles as the modifier for Maestro shortcuts (Ctrl+F, Ctrl+W, etc.)
 			// so we only bypass for macOS to avoid breaking cross-platform app shortcuts.
 			// Exception: Ctrl+Shift+` always creates a new terminal tab regardless of mode/platform.
-			const isMac = navigator.platform.toUpperCase().includes('MAC');
+			const isMac = isMacOSPlatform();
 			if (
 				isMac &&
 				ctx.activeSession?.inputMode === 'terminal' &&

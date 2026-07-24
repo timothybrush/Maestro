@@ -43,7 +43,7 @@ import { logger } from '../../../utils/logger';
 import { Modal } from '../../ui/Modal';
 import { MODAL_PRIORITIES } from '../../../constants/modalPriorities';
 import { DEFAULT_BIONIFY_ALGORITHM } from '../../../utils/bionifyReadingMode';
-import { isMacOSPlatform } from '../../../utils/platformUtils';
+import { formatMetaKeyName } from '../../../utils/shortcutFormatter';
 
 const BIONIFY_ALGORITHM_PATTERN = /^[+-](\s+\d+){4}\s+(?:0(?:\.\d+)?|1(?:\.0+)?)$/;
 
@@ -68,6 +68,8 @@ export interface DisplayTabProps {
 }
 
 export function DisplayTab({ theme }: DisplayTabProps) {
+	// Spelled-out modifier for shortcut hints: 'Command' on macOS, 'Ctrl' elsewhere.
+	const metaKeyName = formatMetaKeyName();
 	const {
 		fontFamily,
 		setFontFamily,
@@ -1119,13 +1121,12 @@ export function DisplayTab({ theme }: DisplayTabProps) {
 					>
 						<div>
 							<p className="text-sm" style={{ color: theme.colors.textMain }}>
-								Treat {isMacOSPlatform() ? 'Command' : 'Ctrl'}+0 as the last tab
+								Treat {metaKeyName}+0 as the last tab
 							</p>
 							<p className="text-xs opacity-50 mt-0.5">
-								Maestro-style: {isMacOSPlatform() ? 'Command' : 'Ctrl'}+1–9 jump to tabs 1–9, and{' '}
-								{isMacOSPlatform() ? 'Command' : 'Ctrl'}+0 jumps to the last tab. Disable to use
-								browser-style: {isMacOSPlatform() ? 'Command' : 'Ctrl'}+1–8 jump to tabs 1–8, and{' '}
-								{isMacOSPlatform() ? 'Command' : 'Ctrl'}+9 jumps to the last tab.
+								Maestro-style: {metaKeyName}+1-9 jump to tabs 1-9, and {metaKeyName}+0 jumps to the
+								last tab. Disable to use browser-style: {metaKeyName}+1-8 jump to tabs 1-8, and{' '}
+								{metaKeyName}+9 jumps to the last tab.
 							</p>
 						</div>
 						<button
@@ -1137,7 +1138,7 @@ export function DisplayTab({ theme }: DisplayTabProps) {
 							}}
 							role="switch"
 							aria-checked={useCmd0AsLastTab}
-							aria-label="Treat Command+0 as the last tab"
+							aria-label={`Treat ${metaKeyName}+0 as the last tab`}
 						>
 							<span
 								className={`absolute left-0 top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${

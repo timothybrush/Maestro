@@ -38,6 +38,7 @@ import type { Theme, ShellInfo } from '../../../types';
 import type { MaestroCliStatus } from '../../../../shared/maestro-cli';
 import {
 	formatMetaKey,
+	formatMetaKeyName,
 	formatEnterToSend,
 	formatShortcutKeys,
 } from '../../../utils/shortcutFormatter';
@@ -1369,7 +1370,7 @@ export function GeneralTab({ theme, isOpen }: GeneralTabProps) {
 					icon={ExternalLink}
 					sectionLabel="Default Browser"
 					title="Use system browser for links"
-					description="Controls the default browser for clicking links. Use Ctrl+Click on URLs to get a context menu and choose the specific browser."
+					description={`Controls the default browser for clicking links. Use ${formatMetaKeyName()}+Click on URLs to get a context menu and choose the specific browser.`}
 					checked={useSystemBrowser}
 					onChange={setUseSystemBrowser}
 					theme={theme}
